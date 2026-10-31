@@ -75,6 +75,7 @@ mod notification_preview;
 #[cfg(test)]
 #[path = "tui/owned_screen_tests.rs"]
 mod owned_screen_tests;
+mod palette_refresh;
 #[cfg(all(test, unix))]
 #[path = "tui_panic_tests.rs"]
 mod panic_tests;
@@ -268,6 +269,11 @@ pub fn set_modes() -> Result<()> {
     let _ = execute!(stdout(), EnableFocusChange);
     #[cfg(windows)]
     let _ = execute!(stdout(), DisableFocusChange);
+    #[cfg(unix)]
+    {
+        let _ = stdout().write_all(b"\x1b[?2031h");
+        let _ = stdout().flush();
+    }
     Ok(())
 }
 
@@ -357,6 +363,11 @@ fn restore_common(
         first_error.get_or_insert(err);
     }
     let _ = execute!(stdout(), DisableFocusChange);
+    #[cfg(unix)]
+    {
+        let _ = stdout().write_all(b"\x1b[?2031l");
+        let _ = stdout().flush();
+    }
     if raw_mode_restore == RawModeRestore::DrainAndDisable {
         #[cfg(unix)]
         if let Err(err) = crate::terminal_probe::wait_for_exit_reports() {

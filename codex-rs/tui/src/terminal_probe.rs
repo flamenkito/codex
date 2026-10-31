@@ -818,7 +818,7 @@ mod imp {
 mod imp;
 
 #[cfg(any(unix, windows, test))]
-fn parse_osc_color(buffer: &[u8], slot: u8) -> Option<(u8, u8, u8)> {
+pub(crate) fn parse_osc_color(buffer: &[u8], slot: u8) -> Option<(u8, u8, u8)> {
     let prefix = format!("\x1B]{slot};");
     let start = find_subslice(buffer, prefix.as_bytes())?;
     let payload_start = start + prefix.len();
@@ -836,7 +836,7 @@ fn parse_default_colors(buffer: &[u8]) -> Option<DefaultColors> {
 }
 
 #[cfg(any(unix, windows, test))]
-fn osc_payload_end(buffer: &[u8]) -> Option<(usize, usize)> {
+pub(crate) fn osc_payload_end(buffer: &[u8]) -> Option<(usize, usize)> {
     let mut idx = 0;
     while idx < buffer.len() {
         match buffer[idx] {

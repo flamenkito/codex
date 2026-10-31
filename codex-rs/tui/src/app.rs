@@ -951,6 +951,14 @@ impl App {
         {
             return Ok(AppRunControl::Exit(ExitReason::UserRequested));
         }
+        if crate::terminal_palette::take_palette_changed() {
+            self.restore_runtime_theme_from_config();
+            tui.terminal.invalidate_viewport();
+            if !tui.is_owned_screen() {
+                self.backtrack_render_pending = true;
+            }
+            tui.frame_requester().schedule_frame();
+        }
         let screen_size = tui.screen_size_for_event(&event)?;
         if !matches!(
             &event,

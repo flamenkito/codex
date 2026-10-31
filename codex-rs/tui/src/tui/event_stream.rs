@@ -115,6 +115,16 @@ impl<S: EventSource + Default> EventBroker<S> {
         let _ = self.resume_events_tx.send(());
     }
 
+    fn is_paused(&self) -> bool {
+        matches!(
+            *self
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+            EventBrokerState::Paused
+        )
+    }
+
     /// Subscribe to a notification that fires whenever [`Self::resume_events`] is called.
     ///
     /// This is used to wake `poll_crossterm_event` when it is paused and waiting for the
@@ -177,6 +187,8 @@ pub struct TuiEventStream<S: EventSource + Default + Unpin = CrosstermEventSourc
     resume_stream: WatchStream<()>,
     terminal_focused: Arc<AtomicBool>,
     poll_draw_first: bool,
+    palette_refresh: super::palette_refresh::PaletteRefresh,
+    palette_tick: Option<Pin<Box<tokio::time::Sleep>>>,
     #[cfg(unix)]
     suspend_context: crate::tui::job_control::SuspendContext,
     #[cfg(unix)]
@@ -198,6 +210,8 @@ impl<S: EventSource + Default + Unpin> TuiEventStream<S> {
             resume_stream,
             terminal_focused,
             poll_draw_first: false,
+            palette_refresh: Default::default(),
+            palette_tick: None,
             #[cfg(unix)]
             suspend_context,
             #[cfg(unix)]
@@ -301,13 +315,23 @@ impl<S: EventSource + Default + Unpin> TuiEventStream<S> {
                 }
                 Some(TuiEvent::Resize(size))
             }
-            Event::Paste(pasted) => Some(TuiEvent::Paste(pasted)),
+            Event::Paste(pasted) => {
+                Some(TuiEvent::Paste(self.palette_refresh.filter_paste(pasted)))
+            }
             Event::FocusGained => {
                 self.terminal_focused.store(true, Ordering::Relaxed);
-                // Keep the startup-cached palette: querying terminal colors here blocks the
-                // input loop, and a direct probe would discard keys typed during the refresh.
+                self.palette_refresh.request();
                 Some(TuiEvent::FocusGained)
             }
+            Event::ThemeChanged => {
+                self.palette_refresh.request();
+                None
+            }
+            Event::DefaultColor { slot, rgb } => self
+                .palette_refresh
+                .accept(slot, rgb, std::time::Instant::now())
+                .filter(|colors| crate::terminal_palette::update_default_colors(*colors))
+                .map(|_| TuiEvent::Draw),
             Event::FocusLost => {
                 self.terminal_focused.store(false, Ordering::Relaxed);
                 Some(TuiEvent::FocusLost)
@@ -324,6 +348,19 @@ impl<S: EventSource + Default + Unpin> Stream for TuiEventStream<S> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         // approximate fairness + no starvation via round-robin.
+        // Poll periodically too: Terminal.app does not provide mode 2031 notifications,
+        // and automatic appearance changes can happen while this window stays focused.
+        use std::future::Future;
+        let tick = self
+            .palette_tick
+            .get_or_insert_with(|| Box::pin(tokio::time::sleep(std::time::Duration::from_secs(5))));
+        if tick.as_mut().poll(cx).is_ready() {
+            self.palette_tick = None;
+            if self.terminal_focused.load(Ordering::Relaxed) && !self.broker.is_paused() {
+                self.palette_refresh.request();
+            }
+            cx.waker().wake_by_ref();
+        }
         let draw_first = self.poll_draw_first;
         self.poll_draw_first = !self.poll_draw_first;
 
@@ -445,6 +482,30 @@ mod tests {
         let (draw_tx, draw_rx) = broadcast::channel(1);
         let terminal_focused = Arc::new(AtomicBool::new(true));
         (broker, handle, draw_tx, draw_rx, terminal_focused)
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn refresh_preserves_interleaved_keys_and_paste() {
+        let (broker, handle, _draw_tx, draw_rx, terminal_focused) = setup();
+        let mut stream = make_stream(broker, draw_rx, terminal_focused);
+        handle.send(Ok(Event::FocusGained));
+        assert!(matches!(stream.next().await, Some(TuiEvent::FocusGained)));
+        handle.send(Ok(Event::DefaultColor {
+            slot: 11,
+            rgb: (1, 2, 3),
+        }));
+        let key = KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE);
+        handle.send(Ok(Event::Key(key)));
+        assert!(matches!(stream.next().await, Some(TuiEvent::Key(actual)) if actual == key));
+        handle.send(Ok(Event::Paste("keep this paste".into())));
+        assert!(
+            matches!(stream.next().await, Some(TuiEvent::Paste(text)) if text == "keep this paste")
+        );
+        handle.send(Ok(Event::DefaultColor {
+            slot: 10,
+            rgb: (4, 5, 6),
+        }));
+        assert!(matches!(stream.next().await, Some(TuiEvent::Draw)));
     }
 
     #[tokio::test(flavor = "current_thread")]
