@@ -769,6 +769,12 @@ impl App {
             return true;
         }
 
+        if self.keymap.app.open_sessions.is_pressed(key_event) {
+            self.pending_open_session_switcher = true;
+            self.pending_open_resume_picker = true;
+            return true;
+        }
+
         if self.keymap.app.open_agents.is_pressed(key_event) {
             self.open_agents_overview(app_server);
             return true;

@@ -15,6 +15,7 @@ fn thread_colors_and_selection_contrast_in_both_picker_layouts() {
             .clone(),
     );
     let row = Row {
+        switcher_meta: Default::default(),
         backend_id: None,
         history_mode: None,
         path: None,
@@ -163,6 +164,7 @@ fn compact_picker_keeps_metadata_and_labeled_primary_actions() {
     state.relative_time_reference = timestamp;
     state.filtered_rows = (1..=6)
         .map(|id| Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,

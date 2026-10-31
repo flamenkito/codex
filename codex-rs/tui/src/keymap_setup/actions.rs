@@ -111,6 +111,7 @@ macro_rules! define_keymap_actions {
 
 define_keymap_actions! {
     global "Global" {
+        open_sessions => "Open the searchable session switcher.",
         open_agents => "Open the shared agent-session overview.",
         open_transcript => "Open the transcript overlay.",
         find_transcript => "Find text in the full transcript.",

@@ -36,6 +36,7 @@ async fn later_page_error_preserves_loaded_sessions() {
                     mode: request.mode,
                     page: Ok(PickerPage {
                         rows: vec![Row {
+                            switcher_meta: Default::default(),
                             backend_id: None,
                             history_mode: None,
                             path: None,

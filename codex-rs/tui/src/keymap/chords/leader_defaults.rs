@@ -24,6 +24,13 @@ pub(in crate::keymap) fn register(keymap: &TuiKeymap, resolved: &mut RuntimeKeym
     );
     for (configured, context, action, completion, spec) in [
         (
+            keymap.global.open_sessions.as_ref(),
+            KeymapContext::Global,
+            "open_sessions",
+            'l',
+            "leader l",
+        ),
+        (
             keymap.global.select_transcript.as_ref(),
             KeymapContext::Global,
             "select_transcript",

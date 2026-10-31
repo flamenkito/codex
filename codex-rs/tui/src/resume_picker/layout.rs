@@ -50,6 +50,30 @@ pub(super) fn areas(area: Rect) -> PickerAreas {
     }
 }
 
+fn panel(state: &PickerState, area: Rect) -> Rect {
+    let width = area.width.min(104);
+    let desired_height = (state.filtered_rows.len().min(15) * 2 + 12).clamp(16, 28) as u16;
+    let height = area.height.min(desired_height);
+    Rect::new(
+        area.x + (area.width - width) / 2,
+        area.y + (area.height - height) / 2,
+        width,
+        height,
+    )
+}
+
+fn content_area(state: &PickerState, area: Rect) -> Rect {
+    if state.switcher.is_some() {
+        panel(state, area).inner(ratatui::layout::Margin::new(1, 1))
+    } else {
+        area
+    }
+}
+
+pub(super) fn list_area(state: &PickerState, area: Rect) -> Rect {
+    areas(content_area(state, area)).list
+}
+
 pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerState) {
     let PickerAreas {
         header,
@@ -57,7 +81,13 @@ pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerSt
         search,
         list,
         footer,
-    } = areas(frame.area());
+    } = areas(content_area(state, frame.area()));
+    if state.switcher.is_some() {
+        frame.render_widget_ref(
+            &ratatui::widgets::Block::bordered().border_style(crate::style::secondary_text_style()),
+            panel(state, frame.area()),
+        );
+    }
     let chrome = |area: Rect| {
         Rect::new(
             area.x.saturating_add(/*rhs*/ 1),
@@ -66,11 +96,25 @@ pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerSt
             area.height,
         )
     };
-    frame.render_widget_ref(&Line::from(state.action.title().bold()), chrome(header));
+    frame.render_widget_ref(
+        &Line::from(
+            if state.switcher.is_some() {
+                "Sessions"
+            } else {
+                state.action.title()
+            }
+            .bold(),
+        ),
+        chrome(header),
+    );
     let toolbar = chrome(toolbar);
     frame.render_widget_ref(&toolbar_for_width(state, toolbar.width), toolbar);
     let search = chrome(search);
-    frame.render_widget_ref(&search_line(state, search.width), search);
+    if state.switcher.is_some() {
+        super::switcher::render_search(frame, state, search);
+    } else {
+        frame.render_widget_ref(&search_line(state, search.width), search);
+    }
     let list = Rect::new(
         list.x.saturating_add(/*rhs*/ 2),
         list.y,
@@ -81,5 +125,20 @@ pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerSt
     if state.is_transcript_loading() {
         render_transcript_loading_overlay(frame, list);
     }
-    render_picker_footer(frame, footer, state, list.height);
+    if state.switcher.is_some() {
+        let footer = chrome(footer);
+        for (index, line) in super::switcher::footer(state, footer.width)
+            .iter()
+            .enumerate()
+        {
+            if index < usize::from(footer.height) {
+                frame.render_widget_ref(
+                    line,
+                    Rect::new(footer.x, footer.y + index as u16, footer.width, 1),
+                );
+            }
+        }
+    } else {
+        render_picker_footer(frame, footer, state, list.height);
+    }
 }

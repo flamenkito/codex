@@ -104,6 +104,7 @@ pub(crate) struct RuntimeKeymap {
 pub(crate) struct AppKeymap {
     /// Open the daemon-wide agent-session overview.
     pub(crate) open_agents: Vec<KeyBinding>,
+    pub(crate) open_sessions: Vec<KeyBinding>,
     /// Open transcript overlay.
     pub(crate) open_transcript: Vec<KeyBinding>,
     /// Find text in the full transcript.
@@ -723,6 +724,11 @@ impl RuntimeKeymap {
             .collect();
 
         let app = AppKeymap {
+            open_sessions: resolve_bindings(
+                keymap.global.open_sessions.as_ref(),
+                &defaults.app.open_sessions,
+                "tui.keymap.global.open_sessions",
+            )?,
             open_agents: resolve_bindings(
                 keymap.global.open_agents.as_ref(),
                 &defaults.app.open_agents,
@@ -1469,6 +1475,10 @@ impl RuntimeKeymap {
                 app.open_agents.as_slice(),
             ),
             (
+                keymap.global.open_sessions.as_ref(),
+                app.open_sessions.as_slice(),
+            ),
+            (
                 keymap.global.open_transcript.as_ref(),
                 app.open_transcript.as_slice(),
             ),
@@ -1698,6 +1708,7 @@ impl RuntimeKeymap {
         Self {
             app: AppKeymap {
                 open_agents: default_bindings![],
+                open_sessions: default_bindings![],
                 open_transcript: default_bindings![ctrl(KeyCode::Char('t'))],
                 find_transcript: default_bindings![plain(KeyCode::F(3))],
                 select_transcript: default_bindings![],
@@ -2046,6 +2057,7 @@ impl RuntimeKeymap {
         #[cfg(unix)]
         for (action, bindings) in [
             ("global.open_agents", &self.app.open_agents),
+            ("global.open_sessions", &self.app.open_sessions),
             ("chat.open_presets", &self.chat.open_presets),
             ("chat.toggle_voice", &self.chat.toggle_voice),
         ] {
@@ -2075,6 +2087,7 @@ impl RuntimeKeymap {
 
         let main_bindings = [
             ("open_agents", self.app.open_agents.as_slice()),
+            ("open_sessions", self.app.open_sessions.as_slice()),
             ("open_transcript", self.app.open_transcript.as_slice()),
             ("find_transcript", self.app.find_transcript.as_slice()),
             ("select_transcript", self.app.select_transcript.as_slice()),
@@ -2183,6 +2196,7 @@ impl RuntimeKeymap {
             "app",
             [
                 ("open_agents", self.app.open_agents.as_slice()),
+                ("open_sessions", self.app.open_sessions.as_slice()),
                 ("open_transcript", self.app.open_transcript.as_slice()),
                 ("find_transcript", self.app.find_transcript.as_slice()),
                 ("select_transcript", self.app.select_transcript.as_slice()),
@@ -2243,6 +2257,7 @@ impl RuntimeKeymap {
             "main",
             [
                 ("open_agents", self.app.open_agents.as_slice()),
+                ("open_sessions", self.app.open_sessions.as_slice()),
                 ("open_transcript", self.app.open_transcript.as_slice()),
                 ("find_transcript", self.app.find_transcript.as_slice()),
                 ("select_transcript", self.app.select_transcript.as_slice()),

@@ -11,6 +11,7 @@ impl App {
     ) -> Result<AppRunControl> {
         // Keep embedded-server initialization on its own runtime task as well as opening the
         // picker on a fresh event-loop iteration; its auth manager needs more stack headroom.
+        let compact_switcher = std::mem::take(&mut self.pending_open_session_switcher);
         let backend_id = app_server.backend_id();
         let picker_config = self.config.clone();
         let picker_target = self.app_server_target.clone();
@@ -61,6 +62,7 @@ impl App {
                 app_server.request_handle(),
                 self.primary_thread_id
                     .or(self.current_displayed_thread_id()),
+                compact_switcher,
             )
             .await;
         match selection {

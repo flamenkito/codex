@@ -77,6 +77,8 @@ mod catalog;
 mod layout;
 mod page_loading;
 mod sources;
+mod switcher;
+use switcher::local_switcher_path;
 
 #[cfg(test)]
 #[path = "resume_picker_color_tests.rs"]
@@ -197,6 +199,10 @@ struct PageLoadRequest {
 }
 
 enum PickerLoadRequest {
+    Switcher {
+        backend_id: crate::backend_id::BackendId,
+        operation: switcher::Operation,
+    },
     Page(PageLoadRequest),
     Preview {
         backend_id: crate::backend_id::BackendId,
@@ -338,6 +344,10 @@ struct PickerBackground {
 }
 
 enum BackgroundEvent {
+    Switcher {
+        backend_id: crate::backend_id::BackendId,
+        result: std::io::Result<switcher::Completion>,
+    },
     PartialPage {
         listing_token: usize,
         page: PickerPage,
@@ -406,6 +416,7 @@ struct SessionPickerRunOptions {
     view_persistence: Option<SessionPickerViewPersistence>,
     keymap: RuntimeKeymap,
     initial_page_mode: PageLoadMode,
+    compact_switcher: bool,
 }
 
 /// Interactive session picker that lists app-server threads with simple search,
@@ -444,6 +455,7 @@ pub async fn run_resume_picker_with_app_server(
         app_server,
         archive_request_handle,
         SessionPickerLaunchContext::Startup,
+        false,
     )
     .await
 }
@@ -462,6 +474,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
     app_server: AppServerSession,
     archive_request_handle: AppServerRequestHandle,
     current_thread_id: Option<ThreadId>,
+    compact_switcher: bool,
 ) -> Result<SessionSelection> {
     run_resume_picker_with_launch_context(
         uses_remote_filesystem,
@@ -473,6 +486,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
         app_server,
         archive_request_handle,
         SessionPickerLaunchContext::ExistingSession { current_thread_id },
+        compact_switcher,
     )
     .await
 }
@@ -491,6 +505,7 @@ async fn run_resume_picker_with_launch_context(
     app_server: AppServerSession,
     archive_request_handle: AppServerRequestHandle,
     launch_context: SessionPickerLaunchContext,
+    compact_switcher: bool,
 ) -> Result<SessionSelection> {
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
@@ -513,6 +528,7 @@ async fn run_resume_picker_with_launch_context(
         filter_cwd: cwd_filter,
         local_filter_cwd,
         action: SessionPickerAction::Resume,
+        compact_switcher,
         launch_context,
         provider_filter,
         initial_density: SessionListDensity::from(
@@ -575,6 +591,7 @@ pub async fn run_fork_picker_with_app_server(
         filter_cwd: cwd_filter,
         local_filter_cwd,
         action: SessionPickerAction::Fork,
+        compact_switcher: false,
         launch_context: SessionPickerLaunchContext::Startup,
         provider_filter,
         initial_density: SessionListDensity::from(
@@ -655,12 +672,20 @@ async fn run_session_picker_event_loop(
     state.keymap = options.keymap;
     state.launch_context = options.launch_context;
     state.initial_page_mode = options.initial_page_mode;
+    if options.compact_switcher {
+        state.switcher = Some(switcher::SessionSwitcher::load(&local_switcher_path(
+            &state,
+        )));
+        state.density = SessionListDensity::Dense;
+    }
     state.start_initial_load();
+    state.request_switcher_pins();
     state.request_frame();
 
     if let Ok(size) = alt.tui.terminal.size() {
-        let list_height = usize::from(layout::areas(Rect::from(size)).list.height);
-        state.update_viewport(list_height, list_viewport_width(size.width));
+        let list = layout::list_area(&state, Rect::from(size));
+        let list_height = usize::from(list.height);
+        state.update_viewport(list_height, list_viewport_width(list.width));
         state.ensure_minimum_rows_for_view(list_height);
     }
     draw_picker(alt.tui, &state, alt.tui.terminal.last_known_screen_size)?;
@@ -671,8 +696,12 @@ async fn run_session_picker_event_loop(
     let mut background_events = UnboundedReceiverStream::new(bg_rx).fuse();
     let mut repo_filter_events = UnboundedReceiverStream::new(repo_filter_rx).fuse();
 
+    let mut switcher_refresh = tokio::time::interval(std::time::Duration::from_secs(5));
+    switcher_refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    switcher_refresh.reset();
     loop {
         tokio::select! {
+            _ = switcher_refresh.tick(), if state.switcher.is_some() => { state.refresh_switcher_statuses(); }
             Some(ev) = tui_events.next() => {
                 alt.tui.clipboard.poll();
                 let screen_size = alt.tui.screen_size_for_event(&ev)?;
@@ -682,7 +711,8 @@ async fn run_session_picker_event_loop(
                     state.chord_matcher.cancel();
                 }
                 let ev = if let TuiEvent::Key(key) = ev {
-                    let Some(key) = state.route_key_chord(key) else {
+                    let key = if state.switcher.as_ref().is_some_and(|switcher| switcher.captures_key(key, &state.keymap)) { Some(key) } else { state.route_key_chord(key) };
+                    let Some(key) = key else {
                         continue;
                     };
                     TuiEvent::Key(key)
@@ -706,9 +736,9 @@ async fn run_session_picker_event_loop(
                         state.handle_paste(pasted);
                     }
                     TuiEvent::Draw | TuiEvent::Resume | TuiEvent::Resize(_) | TuiEvent::FocusGained => {
-                        let list_width = list_viewport_width(screen_size.width);
-                        let list_height =
-                            usize::from(layout::areas(Rect::from(screen_size)).list.height);
+                        let list = layout::list_area(&state, Rect::from(screen_size));
+                        let list_width = list_viewport_width(list.width);
+                        let list_height = usize::from(list.height);
                         state.update_viewport(list_height, list_width);
                         state.ensure_minimum_rows_for_view(list_height);
                         draw_picker(alt.tui, &state, screen_size)?;
@@ -802,6 +832,12 @@ fn spawn_app_server_page_loader(
         let mut page_cwd_filter = PageCwdFilter::default();
         while let Some(request) = request_rx.recv().await {
             match request {
+                PickerLoadRequest::Switcher { operation, .. } => {
+                    let result =
+                        switcher::execute(&mut app_server, &archive_request_handle, operation)
+                            .await;
+                    let _ = bg_tx.send(BackgroundEvent::Switcher { backend_id, result });
+                }
                 PickerLoadRequest::Page(request) => {
                     let mode = request.mode;
                     let cwd_filter = page_cwd_filter.for_request(
@@ -999,6 +1035,7 @@ struct PickerState {
     keymap: RuntimeKeymap,
     initial_page_mode: PageLoadMode,
     chord_matcher: crate::keymap::KeyChordMatcher,
+    switcher: Option<switcher::SessionSwitcher>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1092,6 +1129,7 @@ struct Row {
     updated_at: Option<DateTime<Utc>>,
     cwd: Option<PathBuf>,
     git_branch: Option<String>,
+    switcher_meta: switcher::RowMeta,
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -1205,6 +1243,7 @@ impl PickerState {
             keymap: RuntimeKeymap::defaults(),
             initial_page_mode: PageLoadMode::StoreDefault,
             chord_matcher: crate::keymap::KeyChordMatcher::default(),
+            switcher: None,
         }
     }
 
@@ -1364,6 +1403,15 @@ impl PickerState {
 
     async fn handle_key(&mut self, key: KeyEvent) -> Result<Option<SessionSelection>> {
         self.inline_error = None;
+        if self.switcher.is_some() {
+            let handled = self.handle_switcher_key(key)?;
+            if let Some(selection) = self.take_switcher_selection() {
+                return Ok(Some(selection));
+            }
+            if handled {
+                return Ok(None);
+            }
+        }
         if self.is_transcript_loading() {
             return Ok(self.handle_transcript_loading_key(key));
         }
@@ -1566,6 +1614,12 @@ impl PickerState {
         if self.is_transcript_loading() {
             return;
         }
+        if let Some(switcher) = &mut self.switcher
+            && switcher.paste_rename(&pasted)
+        {
+            self.request_frame();
+            return;
+        }
         let Some(pasted) = normalize_pasted_search_query(&pasted) else {
             return;
         };
@@ -1623,6 +1677,9 @@ impl PickerState {
         event: BackgroundEvent,
     ) -> Result<Option<SessionSelection>> {
         match event {
+            BackgroundEvent::Switcher { backend_id, result } => {
+                self.handle_switcher_completion(backend_id, result)
+            }
             BackgroundEvent::PartialPage {
                 listing_token,
                 page,
@@ -1853,7 +1910,22 @@ impl PickerState {
             self.filtered_rows = base_iter.cloned().collect();
         } else {
             let q = self.query.to_lowercase();
-            self.filtered_rows = base_iter.filter(|r| r.matches_query(&q)).cloned().collect();
+            self.filtered_rows = base_iter
+                .filter(|row| {
+                    if self.switcher.is_some() {
+                        row.display_preview().to_lowercase().contains(&q)
+                    } else {
+                        row.matches_query(&q)
+                    }
+                })
+                .cloned()
+                .collect();
+        }
+        if let Some(switcher) = &mut self.switcher {
+            switcher.arrange(
+                &mut self.filtered_rows,
+                self.relative_time_reference.unwrap_or_else(Utc::now),
+            );
         }
         if self.selected >= self.filtered_rows.len() {
             self.selected = self.filtered_rows.len().saturating_sub(1);
@@ -1866,6 +1938,9 @@ impl PickerState {
     }
 
     fn row_matches_filter(&self, row: &Row) -> bool {
+        if self.switcher.is_some() && row.switcher_meta.child {
+            return false;
+        }
         self.filter_mode == SessionFilterMode::All
             || self.local_filter_cwd.is_none()
             || row
@@ -2249,6 +2324,9 @@ impl PickerState {
     }
 
     fn row_separator_height(&self) -> usize {
+        if self.switcher.is_some() {
+            return 0;
+        }
         match self.density {
             SessionListDensity::Comfortable => 1,
             SessionListDensity::Dense => 0,
@@ -2265,7 +2343,9 @@ fn row_from_app_server_thread(thread: Thread) -> Option<Row> {
         }
     };
     let preview = thread.preview.trim();
+    let switcher_meta = switcher::RowMeta::from_thread(&thread);
     Some(Row {
+        switcher_meta,
         backend_id: None,
         history_mode: None,
         path: thread.path,
@@ -2377,6 +2457,20 @@ fn search_line(state: &PickerState, width: u16) -> Line<'_> {
 }
 
 fn toolbar_for_width(state: &PickerState, width: u16) -> Line<'static> {
+    if state.switcher.is_some() {
+        let label = if state.filter_mode == SessionFilterMode::All {
+            "All directories"
+        } else {
+            "Current directory"
+        };
+        return Line::from(
+            truncate_text(
+                &format!("{label} · updated newest first · Tab to change scope"),
+                usize::from(width),
+            )
+            .set_style(secondary_text_style()),
+        );
+    }
     let toolbar = toolbar_line(state, /*compact*/ false);
     if toolbar.width() <= usize::from(width) {
         return toolbar;
@@ -3059,6 +3153,9 @@ fn render_session_lines(
     is_zebra: bool,
     width: u16,
 ) -> Vec<Line<'static>> {
+    if state.switcher.is_some() {
+        return switcher::lines(row, state, is_selected, width);
+    }
     match state.density {
         SessionListDensity::Comfortable => {
             render_comfortable_session_lines(row, state, is_selected, is_expanded, is_zebra, width)
@@ -3883,6 +3980,7 @@ mod tests {
     pub(super) fn make_row(path: &str, ts: &str, preview: &str) -> Row {
         let timestamp = parse_timestamp_str(ts).expect("timestamp should parse");
         Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from(path)),
@@ -3966,6 +4064,7 @@ mod tests {
     #[test]
     fn row_display_preview_prefers_thread_name() {
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -4392,6 +4491,7 @@ mod tests {
         let thread_id =
             ThreadId::from_string("019dabc1-0ef5-7431-b81c-03037f51f62c").expect("thread id");
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -4456,6 +4556,7 @@ mod tests {
         state.clock_format = ClockFormat::TwentyFourHour;
         state.relative_time_reference = parse_timestamp_str("2026-05-02T14:48:19Z");
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -4674,6 +4775,7 @@ mod tests {
         }
 
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -4702,6 +4804,7 @@ mod tests {
             SessionPickerAction::Resume,
         );
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -4733,6 +4836,7 @@ mod tests {
         let now = parse_timestamp_str("2026-04-28T16:30:00Z").expect("timestamp");
         let mut rows = [
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -4745,6 +4849,7 @@ mod tests {
                 git_branch: None,
             },
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: Some(PathBuf::from("/tmp/b.jsonl")),
@@ -4757,6 +4862,7 @@ mod tests {
                 git_branch: None,
             },
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: Some(PathBuf::from("/tmp/c.jsonl")),
@@ -5230,6 +5336,7 @@ mod tests {
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -5271,6 +5378,7 @@ mod tests {
         );
         state.filtered_rows = vec![
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: None,
@@ -5283,6 +5391,7 @@ mod tests {
                 git_branch: None,
             },
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: None,
@@ -5412,6 +5521,7 @@ mod tests {
         state.pending_transcript_open = Some(thread_id);
         state.filtered_rows = vec![
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: None,
@@ -5424,6 +5534,7 @@ mod tests {
                 git_branch: None,
             },
             Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: None,
@@ -5482,6 +5593,7 @@ mod tests {
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -5515,6 +5627,7 @@ mod tests {
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -5660,6 +5773,7 @@ mod tests {
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -5831,6 +5945,7 @@ session_picker_view = "dense"
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -5873,6 +5988,7 @@ session_picker_view = "dense"
             SessionPickerAction::Resume,
         );
         state.filtered_rows = vec![Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,
@@ -5951,6 +6067,7 @@ session_picker_view = "dense"
 
     fn dense_snapshot_row() -> Row {
         Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -6189,6 +6306,7 @@ session_picker_view = "dense"
         let thread_id =
             ThreadId::from_string("019dabc1-0ef5-7431-b81c-03037f51f62c").expect("thread id");
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -6262,6 +6380,7 @@ session_picker_view = "dense"
 
         let loader = page_only_loader(|_| {});
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/a.jsonl")),
@@ -6326,6 +6445,7 @@ session_picker_view = "dense"
         let now = parse_timestamp_str("2026-04-28T16:30:00Z").expect("timestamp");
         state.all_rows = (0..5)
             .map(|idx| Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: Some(PathBuf::from(format!("/tmp/{idx}.jsonl"))),
@@ -6381,6 +6501,7 @@ session_picker_view = "dense"
         let now = parse_timestamp_str("2026-04-28T16:30:00Z").expect("timestamp");
         state.all_rows = (0..4)
             .map(|idx| Row {
+                switcher_meta: Default::default(),
                 backend_id: None,
                 history_mode: None,
                 path: Some(PathBuf::from(format!("/tmp/{idx}.jsonl"))),
@@ -7075,6 +7196,7 @@ session_picker_view = "dense"
         );
 
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: Some(PathBuf::from("/tmp/missing.jsonl")),
@@ -7117,6 +7239,7 @@ session_picker_view = "dense"
         );
         let thread_id = ThreadId::new();
         let row = Row {
+            switcher_meta: Default::default(),
             backend_id: None,
             history_mode: None,
             path: None,

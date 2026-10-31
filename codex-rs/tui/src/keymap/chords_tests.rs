@@ -635,3 +635,42 @@ fn warning_context_keeps_local_chords_ahead_of_copy_and_hides_unreachable_hints(
     assert!(runtime.list.jump_bottom.is_pressed(event));
     assert!(!runtime.app.copy.is_pressed(event));
 }
+
+#[test]
+fn session_switcher_default_leader_binding_yields_to_customization() {
+    let default = RuntimeKeymap::defaults();
+    assert!(
+        default
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_sessions" && binding.spec == "leader l")
+    );
+    let mut config = TuiKeymap::default();
+    config.global.open_sessions = Some(KeybindingsSpec::Many(vec![]));
+    let disabled = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        !disabled
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_sessions")
+    );
+    config.global.open_sessions = None;
+    config.global.open_agents = Some(binding("leader l"));
+    let customized = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        !customized
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_sessions")
+    );
+    assert!(
+        customized
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_agents" && binding.spec == "leader l")
+    );
+}
