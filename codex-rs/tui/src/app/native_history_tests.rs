@@ -125,3 +125,37 @@ async fn settled_tool_precedes_queued_output_and_is_not_emitted_twice() -> Resul
     assert_eq!(tui.pending_history_lines_for_test(), replayed);
     Ok(())
 }
+
+#[tokio::test]
+async fn runtime_palette_refresh_adapts_auto_theme_and_preserves_explicit_theme() {
+    let mut app = crate::app::test_support::make_test_app().await;
+    for configured in [None, Some("ansi")] {
+        app.local_settings.tui.theme = configured.map(str::to_owned);
+        crate::terminal_palette::with_test_default_colors(None, || {
+            for (bg, expected_auto) in [
+                ((0, 0, 0), "catppuccin-mocha"),
+                ((255, 255, 255), "catppuccin-latte"),
+            ] {
+                let before = crate::render::highlight::syntax_theme_revision();
+                crate::terminal_palette::update_default_colors(
+                    crate::terminal_probe::DefaultColors {
+                        fg: (128, 128, 128),
+                        bg,
+                    },
+                );
+                app.restore_runtime_theme_from_config();
+                let expected = crate::render::highlight::resolve_theme_by_name(
+                    configured.unwrap_or(expected_auto),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(
+                    crate::render::highlight::current_syntax_theme().name,
+                    expected.name
+                );
+                assert!(crate::render::highlight::syntax_theme_revision() > before);
+                assert!(crate::terminal_palette::take_palette_changed());
+            }
+        });
+    }
+}

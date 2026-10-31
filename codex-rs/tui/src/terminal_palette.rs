@@ -88,7 +88,7 @@ fn best_color_for_color_level(target: (u8, u8, u8), color_level: StdoutColorLeve
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct DefaultColors {
     fg: (u8, u8, u8),
     bg: (u8, u8, u8),
@@ -141,6 +141,50 @@ pub(crate) fn set_default_colors_from_startup_probe(
     colors: Option<crate::terminal_probe::DefaultColors>,
 ) {
     imp::set_default_colors_from_startup_probe(colors);
+}
+
+#[cfg(not(test))]
+static PALETTE_CHANGED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(test)]
+thread_local! {
+    static TEST_PALETTE_CHANGED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn take_palette_changed() -> bool {
+    #[cfg(not(test))]
+    {
+        PALETTE_CHANGED.swap(false, std::sync::atomic::Ordering::AcqRel)
+    }
+    #[cfg(test)]
+    {
+        TEST_PALETTE_CHANGED.with(|changed| changed.replace(false))
+    }
+}
+
+/// Replace a complete palette atomically. A timeout never overwrites a valid sample.
+pub(crate) fn update_default_colors(colors: crate::terminal_probe::DefaultColors) -> bool {
+    let next = DefaultColors {
+        fg: colors.fg,
+        bg: colors.bg,
+    };
+    #[cfg(test)]
+    if TEST_DEFAULT_COLORS.with(|colors| colors.get().is_none()) {
+        // Event-stream tests do not install a process-global terminal palette.
+        return true;
+    }
+    if default_colors() == Some(next) {
+        return false;
+    }
+    set_default_colors_from_startup_probe(Some(colors));
+    #[cfg(not(test))]
+    PALETTE_CHANGED.store(true, std::sync::atomic::Ordering::Release);
+    #[cfg(test)]
+    {
+        TEST_DEFAULT_COLORS.with(|colors| colors.set(Some(Some(next))));
+        TEST_PALETTE_CHANGED.with(|changed| changed.set(true));
+    }
+    true
 }
 
 #[cfg(any(all(unix, not(test)), windows))]
@@ -499,6 +543,22 @@ pub const XTERM_COLORS: [(u8, u8, u8); 256] = [
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
+
+    #[test]
+    fn runtime_palette_changes_are_atomic_and_unchanged_replies_do_not_invalidate() {
+        with_test_default_colors(None, || {
+            let colors = crate::terminal_probe::DefaultColors {
+                fg: (255, 255, 255),
+                bg: (0, 0, 0),
+            };
+            assert!(update_default_colors(colors));
+            assert_eq!(default_bg(), Some(colors.bg));
+            assert_eq!(default_fg(), Some(colors.fg));
+            assert!(take_palette_changed());
+            assert!(!update_default_colors(colors));
+            assert!(!take_palette_changed());
+        });
+    }
 
     #[test]
     fn best_color_uses_truecolor_without_quantization() {
