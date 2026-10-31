@@ -7,6 +7,12 @@ handlers. The module lives in `tui/src/resume_picker/switcher.rs`, with small
 host adapters for key registration, the existing catalog, and backend actions.
 The ordinary `/resume` and startup/fork pickers keep their existing presentation.
 
+The compact panel overlays a frozen snapshot of the current conversation and
+composer. Only the panel rectangle is cleared. In inline (`--no-alt-screen`)
+mode, transcript rows above the composer are reconstructed from replayable
+history, since those rows are held by terminal scrollback rather than the frame
+buffer. Resizing clips the snapshot safely; closing restores the chat view.
+
 ## Controls
 
 | Key | Action |
@@ -52,7 +58,7 @@ cache lock. The V8 manifest override documented in `local-theme-refresh.md`
 avoids unrelated Chromium submodule downloads.
 
 ```sh
-cd /Users/asutov/projects/codex/codex-rs
+cd "/Volumes/WD 4TB/projects/codex/codex-rs"
 env CARGO_HOME=/tmp/codex-session-switcher-cargo cargo build --offline \
   --config 'patch.crates-io.v8.path="/Users/asutov/.cargo/git/checkouts/rusty_v8-1c356b58a53d1d98/350c5a8"' \
   -p codex-cli --bin codex --profile dev-small
@@ -79,15 +85,19 @@ session after installation. Package updates can replace custom executables.
 - Mutations require an explicit action, delete requires confirmation, and a
   completion cannot update a different backend's copy of a thread.
 - The compact panel must not persist density changes to the ordinary picker.
+- Every popup frame must paint its backdrop before clearing only the panel bounds.
+  Test both larger and smaller terminal sizes: stale cells must not leak through
+  inside the popup, and conversation cells outside it must survive.
 
 ## Verification (2026-10-31)
 
-- 143 session-picker tests passed, including the new switcher regressions and
+- 144 picker-related tests passed, including the popup rendering regression and
   existing remote-directory, pagination, preview, cancellation and draft tests.
 - 131 keymap tests passed, including default shortcut registration, explicit
   unbinding and conflict precedence.
 - `cargo clippy -p codex-tui --profile dev-small --lib` passed without warnings.
-- The actual CLI passed a PTY test for Ctrl+X/L, the centered panel, title search,
+- The actual CLI passed PTY checks in normal and `--no-alt-screen` modes for
+  Ctrl+X/L, visible background/composer, title search, resizing while searching,
   and cancelling back to the unchanged draft; no prompts were submitted.
 - Regenerated `core/config.schema.json` for `open_sessions`.
 

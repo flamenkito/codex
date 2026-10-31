@@ -47,6 +47,32 @@ impl App {
         picker_app_server = picker_app_server
             .with_remote_cwd_override(app_server.remote_cwd_override().map(Path::to_path_buf));
         picker_app_server.model_provider_override = self.harness_overrides.model_provider.clone();
+        // The terminal buffer owns the current viewport; inline transcript rows above it
+        // live in scrollback, so reconstruct those rows from the replayable history.
+        let background = compact_switcher.then(|| {
+            let screen = Rect::from(tui.terminal.last_known_screen_size);
+            let mut background = ratatui::buffer::Buffer::empty(screen);
+            let viewport = tui.terminal.previous_buffer();
+            if !tui.is_owned_screen() {
+                let lines = self.render_transcript_lines_for_reflow(screen.width).lines;
+                let height = usize::from(viewport.area.y.min(screen.height));
+                let visible = lines.len().min(height);
+                for (index, line) in lines[lines.len() - visible..].iter().enumerate() {
+                    use ratatui::widgets::WidgetRef;
+                    (&line.line).render_ref(
+                        Rect::new(0, (height - visible + index) as u16, screen.width, 1),
+                        &mut background,
+                    );
+                }
+            }
+            let area = screen.intersection(viewport.area);
+            for y in area.top()..area.bottom() {
+                for x in area.left()..area.right() {
+                    background[(x, y)] = viewport[(x, y)].clone();
+                }
+            }
+            background
+        });
         let selection =
             crate::resume_picker::run_resume_picker_from_existing_session_with_app_server(
                 crate::uses_remote_workspace_or_environment(
@@ -62,7 +88,7 @@ impl App {
                 app_server.request_handle(),
                 self.primary_thread_id
                     .or(self.current_displayed_thread_id()),
-                compact_switcher,
+                background,
             )
             .await;
         match selection {
