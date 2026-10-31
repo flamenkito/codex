@@ -196,6 +196,24 @@ pub(crate) async fn run_turn(
 
     let mut client_session =
         prewarmed_client_session.unwrap_or_else(|| sess.services.model_client.new_session());
+    if !auto_compaction_enabled
+        && turn_context.portable_model_history()
+        && !turn_context.provider.info().is_openai()
+        && sess.clone_history().await.raw_items().any(|item| {
+            matches!(
+                item,
+                ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+            )
+        })
+    {
+        maybe_run_previous_model_inline_compact(
+            &sess,
+            &turn_context,
+            &mut client_session,
+            &cancellation_token,
+        )
+        .await?;
+    }
     // TODO(ccunningham): Pre-turn compaction runs before context updates and the
     // new user message are recorded. Estimate pending incoming items (context
     // diffs/full reinjection + user input) and trigger compaction preemptively
@@ -229,7 +247,7 @@ pub(crate) async fn run_turn(
             .await;
         // Publish the failure only after prompt hooks finish, so clients cannot react to
         // an error by steering follow-up input into a turn still preserving its prompt.
-        let message_prefix = match turn_context.provider.capabilities().remote_compaction {
+        let message_prefix = match turn_context.remote_compaction_support() {
             RemoteCompactionSupport::V2 => Some("Error running remote compact task".to_string()),
             RemoteCompactionSupport::Unsupported => None,
         };
@@ -1453,6 +1471,14 @@ async fn maybe_run_previous_model_inline_compact(
     client_session: &mut ModelClientSession,
     cancellation_token: &CancellationToken,
 ) -> CodexResult<()> {
+    let provider_compaction_incompatible = turn_context.portable_model_history()
+        && !turn_context.provider.info().is_openai()
+        && sess.clone_history().await.raw_items().any(|item| {
+            matches!(
+                item,
+                ResponseItem::Compaction { .. } | ResponseItem::ContextCompaction { .. }
+            )
+        });
     let Some(previous_turn_settings) = sess.previous_turn_settings().await else {
         return Ok(());
     };
@@ -1461,7 +1487,10 @@ async fn maybe_run_previous_model_inline_compact(
         turn_context.model_info().comp_hash.as_deref(),
     );
     let previous_model = previous_turn_settings.model;
-    if !should_compact_for_comp_hash_change && previous_model == turn_context.model_info().slug {
+    if !provider_compaction_incompatible
+        && !should_compact_for_comp_hash_change
+        && previous_model == turn_context.model_info().slug
+    {
         return Ok(());
     }
     let mut previous_model_turn_context = turn_context
@@ -1477,7 +1506,7 @@ async fn maybe_run_previous_model_inline_compact(
     );
     let previous_model_turn_context = Arc::new(previous_model_turn_context);
 
-    let reason = if should_compact_for_comp_hash_change {
+    let reason = if provider_compaction_incompatible || should_compact_for_comp_hash_change {
         CompactionReason::CompHashChanged
     } else {
         let Some(old_context_window) = previous_model_turn_context.model_context_window() else {
@@ -1565,7 +1594,9 @@ async fn run_auto_compact(
         conversation.id = %sess.thread_id,
         turn.id = %turn_context.sub_id,
     );
-    if turn_context.config.features.enabled(Feature::TokenBudget) {
+    if turn_context.config.features.enabled(Feature::TokenBudget)
+        && !turn_context.portable_model_history()
+    {
         // Compaction is the reset request, so force a new context window
         // instead of consuming a pending `new_context` tool request.
         crate::compact_token_budget::run_inline_auto_compact_task(
@@ -1577,7 +1608,7 @@ async fn run_auto_compact(
         return Ok(true);
     }
 
-    match turn_context.provider.capabilities().remote_compaction {
+    match turn_context.remote_compaction_support() {
         RemoteCompactionSupport::V2 => {
             let has_candidate = candidate.is_some();
             if !has_candidate {

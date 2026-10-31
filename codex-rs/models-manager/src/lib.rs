@@ -6,6 +6,7 @@ pub mod manager;
 pub mod model_info;
 pub mod model_presets;
 mod originator;
+pub mod routed;
 pub mod test_support;
 
 pub use catalog::CatalogModel;

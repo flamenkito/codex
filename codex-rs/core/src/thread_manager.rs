@@ -518,6 +518,16 @@ pub fn build_models_manager(
     manager.set_api_key_model_discovery_enabled(
         config.features.enabled(Feature::ApiKeyModelDiscovery),
     );
+    if config.model_provider.is_openai() {
+        match codex_model_provider_info::model_routes::ModelRoutes::load(&config.codex_home) {
+            Ok(routes) => {
+                return codex_models_manager::routed::with_model_routes(manager, Arc::new(routes));
+            }
+            Err(error) => {
+                tracing::error!(%error, "Model routes could not be loaded; inference initialization will fail closed")
+            }
+        }
+    }
     manager
 }
 

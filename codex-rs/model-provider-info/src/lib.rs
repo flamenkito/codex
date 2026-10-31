@@ -8,6 +8,8 @@
 //! API provider construction applies the process-wide managed residency policy also
 //! used by default HTTP headers.
 
+pub mod model_routes;
+
 use codex_client::OPENAI_ORGANIZATION_HEADER;
 use codex_client::OPENAI_PROJECT_HEADER;
 use codex_client::Provider as ApiProvider;

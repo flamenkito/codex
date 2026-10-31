@@ -25,11 +25,13 @@ impl ChatWidget {
     }
 
     pub(super) fn model_picker_params(&self) -> SelectionViewParams {
-        if self.model_switcher_overlay {
+        let mut params = if self.model_switcher_overlay {
             SelectionViewParams::confirmation()
         } else {
             SelectionViewParams::picker()
-        }
+        };
+        params.preferred_dialog_width = Some(100);
+        params
     }
 
     fn open_model_popup_impl(&mut self) {
@@ -291,6 +293,10 @@ impl ChatWidget {
             })];
             items.push(SelectionItem {
                 name: preset.display_name.clone(),
+                search_value: Some(format!(
+                    "{} {} {}",
+                    preset.model, preset.display_name, preset.description
+                )),
                 description,
                 is_current,
                 secondary_action: direct_effort.and_then(|effort| {
@@ -663,6 +669,10 @@ impl ChatWidget {
         ))
         .wrap(Wrap { trim: false });
 
+        if self.model_switcher_overlay {
+            self.bottom_pane
+                .dismiss_active_view_if_id(ALL_MODELS_SELECTION_VIEW_ID);
+        }
         self.bottom_pane.show_selection_view(SelectionViewParams {
             header: Box::new(header),
             items,

@@ -1866,6 +1866,7 @@ impl Session {
                     workspace_routing.as_ref().clone(),
                     extensions.model_request_contributors().to_vec(),
                 )
+                .with_model_routes_from_home(config.codex_home.as_path())?
                 .with_executed_tool_calls(executed_tool_calls.clone())
                 .with_restored_history(matches!(
                     &initial_history,

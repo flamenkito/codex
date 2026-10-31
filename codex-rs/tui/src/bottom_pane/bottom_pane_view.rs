@@ -33,6 +33,11 @@ pub(crate) trait BottomPaneView: Renderable {
         ViewPresentation::Inline
     }
 
+    /// Preferred maximum width for a centered dialog before viewport clamping.
+    fn preferred_dialog_width(&self) -> Option<u16> {
+        None
+    }
+
     /// Refresh an open configuration panel, including one below a child editor.
     /// Returns whether this view contains a configuration panel.
     fn update_config_panel(&mut self, _update: &crate::config_panel::ConfigPanelUpdate) -> bool {

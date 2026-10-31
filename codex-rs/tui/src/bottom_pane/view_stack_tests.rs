@@ -7,11 +7,16 @@ use ratatui::backend::TestBackend;
 
 struct TestPane {
     presentation: ViewPresentation,
+    preferred_dialog_width: Option<u16>,
 }
 
 impl BottomPaneView for TestPane {
     fn presentation(&self) -> ViewPresentation {
         self.presentation
+    }
+
+    fn preferred_dialog_width(&self) -> Option<u16> {
+        self.preferred_dialog_width
     }
 }
 
@@ -45,9 +50,11 @@ impl Renderable for TestPane {
 fn centered_dialog_retains_backdrop_and_routes_cursor() {
     let backdrop = TestPane {
         presentation: ViewPresentation::Inline,
+        preferred_dialog_width: None,
     };
     let dialog = TestPane {
         presentation: super::super::SelectionViewParams::confirmation().presentation,
+        preferred_dialog_width: None,
     };
     let overlay = DialogOverlay {
         backdrop: RenderableItem::Borrowed(&backdrop),
@@ -67,9 +74,11 @@ fn centered_dialog_retains_backdrop_and_routes_cursor() {
         let views: Vec<Box<dyn BottomPaneView>> = vec![
             Box::new(TestPane {
                 presentation: ViewPresentation::Inline,
+                preferred_dialog_width: None,
             }),
             Box::new(TestPane {
                 presentation: ViewPresentation::Centered,
+                preferred_dialog_width: None,
             }),
         ];
         let stack = ViewStack(&views);
@@ -80,4 +89,33 @@ fn centered_dialog_retains_backdrop_and_routes_cursor() {
         snapshots.push(format!("{width}x{height}\n{}", terminal.backend()));
     }
     insta::assert_snapshot!(snapshots.join("\n"));
+}
+
+#[test]
+fn centered_dialog_uses_preferred_width_and_viewport_clamping() {
+    let dialog = TestPane {
+        presentation: ViewPresentation::Centered,
+        preferred_dialog_width: Some(100),
+    };
+
+    for (viewport, expected) in [
+        (Rect::new(0, 0, 120, 20), Rect::new(10, 8, 100, 3)),
+        (Rect::new(0, 0, 90, 20), Rect::new(2, 8, 86, 3)),
+        (Rect::new(0, 0, 6, 2), Rect::new(0, 0, 6, 2)),
+    ] {
+        assert_eq!(dialog_area(&dialog, viewport), expected);
+    }
+}
+
+#[test]
+fn centered_dialog_without_preference_keeps_72_column_cap() {
+    let dialog = TestPane {
+        presentation: ViewPresentation::Centered,
+        preferred_dialog_width: None,
+    };
+
+    assert_eq!(
+        dialog_area(&dialog, Rect::new(0, 0, 120, 20)),
+        Rect::new(24, 8, 72, 3)
+    );
 }

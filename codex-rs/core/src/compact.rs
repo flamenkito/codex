@@ -6,6 +6,8 @@ use std::time::Instant;
 use crate::Prompt;
 use crate::client::ModelClientSession;
 use crate::client_common::ResponseEvent;
+use crate::compact_model_fallback::record_model_fallback;
+use crate::compact_model_fallback::should_retry_with_current_model;
 use crate::context::BaseInstructionsFragment;
 use crate::context::CompactionSummary;
 use crate::context::ContextualUserFragment;
@@ -210,15 +212,42 @@ async fn run_compact_task_inner(
             return Err(error);
         }
     }
-    let result = run_compact_task_inner_impl(
+    let mut result = Box::pin(run_compact_task_inner_impl(
         Arc::clone(&sess),
         Arc::clone(&turn_context),
-        replacement_step_context,
-        input,
-        world_state,
+        Arc::clone(&replacement_step_context),
+        input.clone(),
+        Arc::clone(&world_state),
         compaction_metadata,
-    )
+    ))
     .await;
+    let fallback_turn_context = &replacement_step_context.turn;
+    if let Err(error) = &result
+        && should_retry_with_current_model(error, &turn_context, fallback_turn_context)
+    {
+        sess.set_last_known_step_context(&replacement_step_context)
+            .await;
+        let fallback_result = Box::pin(run_compact_task_inner_impl(
+            Arc::clone(&sess),
+            Arc::clone(fallback_turn_context),
+            Arc::clone(&replacement_step_context),
+            input,
+            world_state,
+            compaction_metadata,
+        ))
+        .await;
+        record_model_fallback(
+            &sess.services.session_telemetry,
+            &turn_context.model_info().slug,
+            &fallback_turn_context.model_info().slug,
+            reason,
+            compaction_metadata.implementation(),
+            fallback_result.as_ref().err(),
+        );
+        if fallback_result.is_ok() {
+            result = fallback_result;
+        }
+    }
     let status = compaction_status_from_result(&result);
     let codex_error = result.as_ref().err();
     if result.is_ok() {

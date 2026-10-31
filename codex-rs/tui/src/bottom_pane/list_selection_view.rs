@@ -213,6 +213,8 @@ pub(crate) struct SelectionItem {
 /// `description_layout` optionally hides descriptions when their column would become too narrow.
 pub(crate) struct SelectionViewParams {
     pub presentation: super::ViewPresentation,
+    /// Preferred maximum width for a centered dialog before viewport clamping.
+    pub preferred_dialog_width: Option<u16>,
     pub picker_surface: PickerSurface,
     /// Upper row budget; compact completion menus retain the default of eight.
     pub max_visible_rows: usize,
@@ -290,6 +292,7 @@ impl Default for SelectionViewParams {
             reserve_result_rows: false,
             allow_input_when_disconnected: false,
             presentation: super::ViewPresentation::Inline,
+            preferred_dialog_width: None,
             view_id: None,
             title: None,
             subtitle: None,
@@ -341,6 +344,7 @@ pub(crate) enum SearchMode {
 /// change.
 pub(crate) struct ListSelectionView {
     presentation: super::ViewPresentation,
+    preferred_dialog_width: Option<u16>,
     picker_surface: PickerSurface,
     max_visible_rows: usize,
     reserve_result_rows: bool,
@@ -502,6 +506,7 @@ impl ListSelectionView {
             reserve_result_rows: params.reserve_result_rows,
             allow_input_when_disconnected: params.allow_input_when_disconnected,
             presentation: params.presentation,
+            preferred_dialog_width: params.preferred_dialog_width,
             view_id: params.view_id,
             footer_note: params.footer_note,
             footer_hint: params.footer_hint,
@@ -1276,6 +1281,10 @@ impl ListSelectionView {
 impl BottomPaneView for ListSelectionView {
     fn presentation(&self) -> super::ViewPresentation {
         self.presentation
+    }
+
+    fn preferred_dialog_width(&self) -> Option<u16> {
+        self.preferred_dialog_width
     }
 
     fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {

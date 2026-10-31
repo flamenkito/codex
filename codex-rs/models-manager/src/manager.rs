@@ -134,6 +134,19 @@ type SharedModelsEndpointClient = Arc<dyn ModelsEndpointClient>;
 
 /// Coordinates model discovery plus cached metadata on disk.
 pub trait ModelsManager: fmt::Debug + Send + Sync {
+    /// Explicit inference route for an additional model, independent of the stored thread provider.
+    fn routed_provider_for_model(
+        &self,
+        _model: &str,
+    ) -> Option<codex_model_provider_info::ModelProviderInfo> {
+        None
+    }
+
+    /// Mixed-provider conversations require portable (local) compaction.
+    fn has_model_routes(&self) -> bool {
+        false
+    }
+
     /// Select an isolated catalog for a supported thread originator. `None` retains this manager.
     fn for_originator(&self, _originator: &str) -> Option<SharedModelsManager> {
         None

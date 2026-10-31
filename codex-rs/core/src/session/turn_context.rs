@@ -398,7 +398,24 @@ enum TurnContextBuildMode {
     InjectItems,
 }
 
+struct PortableModelHistory;
+struct PrimaryModelProvider(SharedModelProvider);
+
 impl TurnContext {
+    pub(crate) fn portable_model_history(&self) -> bool {
+        self.extension_data.get::<PortableModelHistory>().is_some()
+    }
+
+    pub(crate) fn remote_compaction_support(
+        &self,
+    ) -> codex_model_provider::RemoteCompactionSupport {
+        if self.extension_data.get::<PortableModelHistory>().is_some() {
+            codex_model_provider::RemoteCompactionSupport::Unsupported
+        } else {
+            self.provider.capabilities().remote_compaction
+        }
+    }
+
     /// Returns the resolved causal root for this admitted turn.
     pub(crate) fn root_turn_id(&self) -> String {
         self.turn_metadata_state
@@ -788,6 +805,14 @@ impl TurnContext {
         let model_info = models_manager
             .get_model_info(model.as_str(), &config.to_models_manager_config())
             .await;
+        let provider = if let Some(info) = models_manager.routed_provider_for_model(&model) {
+            codex_model_provider::create_model_provider(info, None)
+        } else {
+            self.extension_data
+                .get::<PrimaryModelProvider>()
+                .map(|primary| Arc::clone(&primary.0))
+                .unwrap_or_else(|| Arc::clone(&self.provider))
+        };
         let supported_reasoning_levels = model_info
             .supported_reasoning_levels
             .iter()
@@ -845,7 +870,7 @@ impl TurnContext {
             active_host_plugin_identities: self.active_host_plugin_identities.clone(),
             next_step_settings: ArcSwap::from(step_settings),
             session_telemetry,
-            provider: self.provider.clone(),
+            provider,
             session_source: self.session_source.clone(),
             history_mode: self.history_mode,
             parent_thread_id: self.parent_thread_id,
@@ -1052,6 +1077,11 @@ impl Session {
         sub_id: String,
         skills_snapshot: HostSkillsSnapshot,
     ) -> TurnContext {
+        let primary_model_provider = Arc::clone(&provider);
+        let provider = models_manager
+            .routed_provider_for_model(&step_settings.model_info.slug)
+            .map(|info| codex_model_provider::create_model_provider(info, None))
+            .unwrap_or(provider);
         let model_info = &step_settings.model_info;
         let session_telemetry_for_context = step_settings.telemetry(session_telemetry);
         let session_source = session_configuration.session_source.clone();
@@ -1114,6 +1144,10 @@ impl Session {
             sub_id.clone(),
             session_configuration.turn_extension_init.clone(),
         ));
+        if models_manager.has_model_routes() {
+            extension_data.insert(PortableModelHistory);
+            extension_data.insert(PrimaryModelProvider(primary_model_provider));
+        }
         extension_data.insert(skills_snapshot);
         TurnContext {
             sub_id,

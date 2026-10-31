@@ -295,6 +295,8 @@ impl RequestRouteTelemetry {
 /// call site.
 #[derive(Debug, Clone)]
 pub struct ModelClient {
+    model_routes: Arc<codex_model_provider_info::model_routes::ModelRoutes>,
+    portable_reasoning_prefix: Option<Arc<std::collections::HashSet<String>>>,
     state: Arc<ModelClientState>,
     agent_identity_policy: AgentIdentityAuthPolicy,
     prompt_cache_key_policy: PromptCacheKey,
@@ -324,6 +326,8 @@ pub struct ModelClient {
 /// the previous turn's sticky-routing token into the next turn, which violates the client/server
 /// contract and can cause routing bugs.
 pub struct ModelClientSession {
+    primary_client: ModelClient,
+    active_model_route: Option<String>,
     client: ModelClient,
     websocket_session: WebsocketSession,
     /// Turn state for sticky routing.
@@ -613,6 +617,8 @@ impl ModelClient {
             && !crate::guardian::is_basic_session_source(&session_source)
             && !memory_consolidation;
         Self {
+            model_routes: Arc::default(),
+            portable_reasoning_prefix: None,
             state: Arc::new(ModelClientState {
                 thread_id,
                 provider: model_provider,
@@ -750,6 +756,8 @@ impl ModelClient {
             websocket_session.auth_owner_generation = auth_owner_generation;
         }
         ModelClientSession {
+            primary_client: self.clone(),
+            active_model_route: None,
             client: self.clone(),
             websocket_session,
             turn_state: Arc::new(OnceLock::new()),
@@ -935,6 +943,9 @@ impl ModelClient {
         &self,
         responses_metadata: &CodexResponsesMetadata,
     ) -> ApiHeaderMap {
+        if !self.model_routes.is_empty() && !self.state.provider.info().is_openai() {
+            return ApiHeaderMap::new();
+        }
         let mut extra_headers = responses_metadata.compatibility_headers();
         if matches!(
             self.state.session_source,
@@ -1029,6 +1040,7 @@ impl ModelClient {
         include_internal: bool,
     ) -> Result<ResponsesApiRequest> {
         let mut input = prompt.get_formatted_input_for_request(model_info);
+        self.prepare_portable_model_input(&mut input)?;
         if !self.reasoning_effort_override_enabled(model_info) {
             // Unsupported models and disabled overrides must also accept saved history.
             // Filter only the request copy; persisted history remains unchanged.
@@ -1070,6 +1082,7 @@ impl ModelClient {
         } else {
             Some(create_tools_raw_json_for_responses_api(&prompt.tools)?.into())
         };
+        self.deduplicate_additional_tools(prompt, &mut input);
         if !prompt.base_instructions.text.is_empty() {
             let mut instructions = ContextualUserFragment::into(BaseInstructionsFragment(
                 prompt.base_instructions.text.clone(),
@@ -1255,8 +1268,13 @@ impl ModelClient {
                 runtime_id,
             });
         }
-        self.provider_client_setup(routing, &self.state.provider)
-            .await
+        let mut setup = self
+            .provider_client_setup(routing, &self.state.provider)
+            .await?;
+        if !self.model_routes.is_empty() && !self.state.provider.info().is_openai() {
+            setup.redirect_policy = ClientRedirectPolicy::Reject;
+        }
+        Ok(setup)
     }
 
     // Realtime keeps provider auth until its runtime integration lands later in the stack.
@@ -1694,6 +1712,7 @@ impl ModelClientSession {
         session_telemetry: &SessionTelemetry,
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<()> {
+        self.select_model_route(&model_info.slug);
         if !self.client.responses_websocket_enabled() {
             return Ok(());
         }
@@ -2443,6 +2462,8 @@ impl ModelClientSession {
         service_tier: Option<String>,
         responses_metadata: &CodexResponsesMetadata,
     ) -> Result<()> {
+        self.select_model_route(&model_info.slug);
+        self.capture_portable_reasoning_prefix(prompt);
         if !self.client.responses_websocket_enabled() {
             return Ok(());
         }
@@ -2505,6 +2526,13 @@ impl ModelClientSession {
         responses_metadata: &CodexResponsesMetadata,
         inference_trace: &InferenceTraceContext,
     ) -> Result<ResponseStream> {
+        self.select_model_route(&model_info.slug);
+        self.capture_portable_reasoning_prefix(prompt);
+        let service_tier = if self.active_model_route.is_some() {
+            None
+        } else {
+            service_tier
+        };
         let wire_api = self.client.state.provider.info().wire_api;
         match wire_api {
             WireApi::Responses => {
@@ -3244,6 +3272,9 @@ impl WebsocketTelemetry for ApiTelemetry {
             .record_websocket_event(result, duration);
     }
 }
+
+#[path = "client_model_routes.rs"]
+mod model_routes;
 
 #[cfg(test)]
 #[path = "client_tests.rs"]

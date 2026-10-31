@@ -19,7 +19,7 @@ fn dialog_area(view: &dyn BottomPaneView, area: Rect) -> Rect {
         .width
         .saturating_sub(/*rhs*/ 4)
         .max(area.width.min(/*other*/ 8))
-        .min(/*other*/ 72);
+        .min(view.preferred_dialog_width().unwrap_or(72));
     let height = view.desired_height(width).min(area.height);
     Rect::new(
         area.x + (area.width - width) / 2,
