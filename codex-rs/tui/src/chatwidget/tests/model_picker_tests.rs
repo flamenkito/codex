@@ -64,7 +64,7 @@ async fn model_dialog_width_preference_is_inherited_without_changing_inline_pick
     assert_eq!(
         chat.centered_dialog()
             .and_then(|dialog| dialog.0.preferred_dialog_width()),
-        Some(100)
+        Some(88)
     );
     let preset = chat
         .model_catalog
@@ -77,7 +77,7 @@ async fn model_dialog_width_preference_is_inherited_without_changing_inline_pick
     assert_eq!(
         chat.centered_dialog()
             .and_then(|dialog| dialog.0.preferred_dialog_width()),
-        Some(100)
+        Some(88)
     );
 
     let (mut inline_chat, _, _) = make_chatwidget_manual(Some("gpt-5.5")).await;
@@ -116,7 +116,7 @@ async fn model_switcher_replaces_model_list_with_reasoning_dialog() {
     assert_eq!(
         chat.centered_dialog()
             .and_then(|dialog| dialog.0.preferred_dialog_width()),
-        Some(100)
+        Some(88)
     );
     chat.handle_key_event(KeyCode::Esc.into());
     assert!(chat.no_modal_or_popup_active());

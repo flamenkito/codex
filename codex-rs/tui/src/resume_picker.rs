@@ -3069,6 +3069,11 @@ fn render_list(frame: &mut crate::custom_terminal::Frame, area: Rect, state: &Pi
         return;
     }
     Clear.render(area, frame.buffer);
+    if state.switcher.is_some() {
+        ratatui::widgets::Block::default()
+            .style(crate::bottom_pane::switcher_surface_style())
+            .render(area, frame.buffer);
+    }
 
     let rows = &state.filtered_rows;
     if rows.is_empty() {

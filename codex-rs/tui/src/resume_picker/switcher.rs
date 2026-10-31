@@ -6,6 +6,10 @@ use serde::Deserialize;
 use serde::Serialize;
 use std::io::Write;
 
+fn selected_style() -> Style {
+    crate::bottom_pane::switcher_selection_style()
+}
+
 /// Fit terminal cells, rather than counting Unicode graphemes as columns.
 fn fit(text: &str, width: usize) -> String {
     crate::line_truncation::truncate_line_with_ellipsis_if_overflow(
@@ -652,24 +656,16 @@ pub(super) fn lines(
     {
         lines.push(Line::from(
             fit(&switcher.group(row, reference), usize::from(width))
-                .set_style(secondary_text_style())
+                .cyan()
                 .bold(),
         ));
     }
     let current = row.thread_id.is_some() && row.thread_id == state.current_switcher_thread();
-    let slot = row
-        .thread_id
-        .and_then(|id| switcher.slots.iter().position(|slot| *slot == id))
-        .map(|index| (index + 1).to_string())
-        .unwrap_or_else(|| " ".into());
-    let indicator = [
-        if current { "current" } else { "" },
-        row.switcher_meta.activity,
-    ]
-    .into_iter()
-    .filter(|part| !part.is_empty())
-    .collect::<Vec<_>>()
-    .join(" · ");
+    let indicator = [row.switcher_meta.activity]
+        .into_iter()
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join(" · ");
     let directory = if state.filter_mode == SessionFilterMode::All {
         row.cwd
             .as_ref()
@@ -690,15 +686,15 @@ pub(super) fn lines(
     } else {
         row.display_preview()
     };
-    let title = fit(title, usize::from(width).saturating_sub(suffix.width() + 7));
+    let title = fit(title, usize::from(width).saturating_sub(suffix.width() + 5));
     let style = if selected {
-        dense_selected_style()
+        selected_style()
     } else {
-        Style::default()
+        crate::bottom_pane::switcher_surface_style()
     };
-    let marker = if selected { ">" } else { " " };
+    let marker = if current { "●" } else { " " };
     let line = Line::from(vec![
-        Span::raw(format!("{marker} {slot} ")),
+        Span::raw(format!(" {marker} ")),
         Span::raw(title),
         Span::raw("  "),
         suffix.set_style(secondary_text_style()),
@@ -729,7 +725,21 @@ pub(super) fn render_search(
             frame.set_cursor_position(position);
         }
     } else {
-        frame.render_widget_ref(&search_line(state, area.width), area);
+        let label = if state.query.is_empty() {
+            "Search".to_string()
+        } else {
+            format!("Search: {}", state.query)
+        };
+        frame.render_widget_ref(&Line::from(label), area);
+        let cursor_x = area
+            .x
+            .saturating_add(if state.query.is_empty() {
+                0
+            } else {
+                ("Search: ".len() + state.query.width()) as u16
+            })
+            .min(area.right().saturating_sub(1));
+        frame.set_cursor_position((cursor_x, area.y));
     }
 }
 
@@ -737,35 +747,51 @@ pub(super) fn footer(state: &PickerState, width: u16) -> Vec<Line<'static>> {
     let Some(switcher) = state.switcher.as_ref() else {
         return Vec::new();
     };
-    let leader = state
-        .keymap
-        .chords
-        .leader
-        .first()
-        .map(crate::key_hint::KeyBinding::display_label)
-        .unwrap_or_else(|| "unbound".into());
-    let status = if switcher.pending {
-        "Saving…"
+    let actions = if switcher.pending {
+        vec!["Saving…".bold()]
     } else if switcher.rename.is_some() {
-        "Enter save · Esc cancel"
+        vec![
+            "save ".into(),
+            "enter".set_style(secondary_text_style()),
+            "   cancel ".into(),
+            "esc".set_style(secondary_text_style()),
+        ]
     } else if switcher.leader_pending {
-        "Leader: f directory filter · 1–9 switch"
+        vec![
+            "directory ".into(),
+            "f".set_style(secondary_text_style()),
+            "   quick switch ".into(),
+            "1–9".set_style(secondary_text_style()),
+            "   cancel ".into(),
+            "esc".set_style(secondary_text_style()),
+        ]
+    } else if width >= 58 {
+        vec![
+            "pin/unpin ".into(),
+            "ctrl+f".set_style(secondary_text_style()),
+            "  delete ".into(),
+            "ctrl+d".set_style(secondary_text_style()),
+            "  rename ".into(),
+            "ctrl+r".set_style(secondary_text_style()),
+        ]
     } else {
-        "↑↓ select · Enter switch · Esc back"
+        vec![
+            "switch ".into(),
+            "enter".set_style(secondary_text_style()),
+            "  pin ".into(),
+            "ctrl+f".set_style(secondary_text_style()),
+        ]
     };
-    [
-        status.to_string(),
-        "Ctrl+F pin/unpin · Ctrl+R rename · Ctrl+D delete".into(),
-        format!("{leader} → F directory filter · {leader} → 1–9 quick switch"),
-        state
-            .inline_error
-            .clone()
-            .or_else(|| switcher.storage_error.clone())
-            .unwrap_or_default(),
+    let message = state
+        .inline_error
+        .clone()
+        .or_else(|| switcher.storage_error.clone())
+        .unwrap_or_default();
+    vec![
+        Line::from(actions),
+        Line::from(fit(&message, usize::from(width)))
+            .style(crate::bottom_pane::switcher_surface_style()),
     ]
-    .into_iter()
-    .map(|text| Line::from(fit(&text, usize::from(width))))
-    .collect()
 }
 
 #[cfg(test)]

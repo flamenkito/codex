@@ -41,6 +41,8 @@ use super::bottom_pane_view::ViewCompletion;
 pub(crate) use super::picker_style::PickerSurface;
 use super::picker_style::render_scroll_indicators;
 use super::picker_style::selection_style;
+use super::picker_style::switcher_selection_style;
+use super::picker_style::switcher_surface_style;
 use super::popup_consts::MAX_POPUP_ROWS;
 use super::scroll_state::ScrollState;
 use super::selection_popup_common::ColumnWidthConfig;
@@ -758,7 +760,11 @@ impl ListSelectionView {
             .to_string()
             .len();
         let mut enabled_row_number = 0;
-        let row_selection_style = Some(selection_style());
+        let row_selection_style = Some(if self.picker_surface == PickerSurface::Switcher {
+            switcher_selection_style()
+        } else {
+            selection_style()
+        });
         self.filtered_indices
             .iter()
             .enumerate()
@@ -1287,6 +1293,10 @@ impl BottomPaneView for ListSelectionView {
         self.preferred_dialog_width
     }
 
+    fn dim_backdrop(&self) -> bool {
+        self.picker_surface == PickerSurface::Switcher
+    }
+
     fn keymap_contexts(&self) -> crate::keymap::KeymapContextSet {
         crate::keymap::KeymapContextSet::new(crate::keymap::KeymapContext::List)
     }
@@ -1586,7 +1596,7 @@ impl Renderable for ListSelectionView {
         let tab_gap = u16::from(tab_height > 0 && search_field_visible);
         height = height.saturating_add(tab_height + tab_gap);
         height = height.saturating_add(rows_height + 2 + header_gap);
-        if self.picker_surface == PickerSurface::Panel {
+        if self.picker_surface != PickerSurface::Terminal {
             height = height.saturating_add(/*rhs*/ 1);
         }
         if search_field_visible {
@@ -1629,6 +1639,11 @@ impl Renderable for ListSelectionView {
         if area.height == 0 || area.width == 0 {
             return;
         }
+        if self.picker_surface == PickerSurface::Switcher {
+            ratatui::widgets::Block::default()
+                .style(switcher_surface_style())
+                .render(area, buf);
+        }
         let search_field_visible = self.search_field_visible();
         let inner_width = popup_content_width(area.width);
         let side_w = self.side_layout_width(inner_width);
@@ -1657,7 +1672,7 @@ impl Renderable for ListSelectionView {
         let tab_height = tab_bar_height(&self.tabs, inner_width);
         let mut footer_rows = note_height + hint_height;
         // Wrapped hints yield before the title, controls, and selected result.
-        let minimum_content = u16::from(self.picker_surface == PickerSurface::Panel)
+        let minimum_content = u16::from(self.picker_surface != PickerSurface::Terminal)
             + header_height.min(/*other*/ 1)
             + tab_height
             + u16::from(search_field_visible)
@@ -1667,16 +1682,23 @@ impl Renderable for ListSelectionView {
             Layout::vertical([Constraint::Fill(1), Constraint::Length(footer_rows)]).areas(area);
 
         let outer_content_area = content_area;
-        Self::clear_to_terminal_bg(buf, outer_content_area);
-        if self.picker_surface == PickerSurface::Panel {
+        if self.picker_surface != PickerSurface::Switcher {
+            Self::clear_to_terminal_bg(buf, outer_content_area);
+        }
+        if self.picker_surface != PickerSurface::Terminal {
+            let style = if self.picker_surface == PickerSurface::Switcher {
+                switcher_surface_style()
+            } else {
+                crate::style::user_message_style()
+            };
             ratatui::widgets::Block::default()
-                .style(crate::style::user_message_style())
+                .style(style)
                 .render(outer_content_area, buf);
         }
         // The list owns its vertical spacer rows so hints remain adjacent
         // to results even when search, tabs, or a header are present.
         let content_area = outer_content_area.inset(Insets::vh(/*v*/ 0, /*h*/ 2));
-        let content_area = if self.picker_surface == PickerSurface::Panel {
+        let content_area = if self.picker_surface != PickerSurface::Terminal {
             // At tiny heights, leave room for both the clipped header and selected row.
             let top_gap = u16::from(content_area.height > 2);
             Rect::new(

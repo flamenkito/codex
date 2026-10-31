@@ -8,7 +8,13 @@ host adapters for key registration, the existing catalog, and backend actions.
 The ordinary `/resume` and startup/fork pickers keep their existing presentation.
 
 The compact panel overlays a frozen snapshot of the current conversation and
-composer. Only the panel rectangle is cleared. In inline (`--no-alt-screen`)
+composer. Its borderless, theme-aware surface (with an ANSI fallback when the
+terminal color probe is unavailable) is capped at 88 columns, places
+`esc` at the right edge of the title row, and keeps the three management actions
+on one footer line. A second footer row is reserved for status and errors. Its
+geometry is derived from the unfiltered catalog, so searching—including a search
+with no matches—does not resize the panel. Only the panel rectangle is cleared.
+In inline (`--no-alt-screen`)
 mode, transcript rows above the composer are reconstructed from replayable
 history, since those rows are held by terminal scrollback rather than the frame
 buffer. Resizing clips the snapshot safely; closing restores the chat view.
@@ -91,7 +97,8 @@ session after installation. Package updates can replace custom executables.
 
 ## Verification (2026-10-31)
 
-- 144 picker-related tests passed, including the popup rendering regression and
+- 145 picker-related tests passed, including the OpenCode-style popup rendering
+  regression and
   existing remote-directory, pagination, preview, cancellation and draft tests.
 - 131 keymap tests passed, including default shortcut registration, explicit
   unbinding and conflict precedence.
@@ -99,6 +106,8 @@ session after installation. Package updates can replace custom executables.
 - The actual CLI passed PTY checks in normal and `--no-alt-screen` modes for
   Ctrl+X/L, visible background/composer, title search, resizing while searching,
   and cancelling back to the unchanged draft; no prompts were submitted.
+- Source-level rendering checks cover the 88-column cap, right-aligned `esc`,
+  borderless themed surface, compact footer, and stable search geometry.
 - Regenerated `core/config.schema.json` for `open_sessions`.
 
 Use `RUST_MIN_STACK=16777216` for the picker test filter; the app fixture futures

@@ -30,7 +30,11 @@ impl ChatWidget {
         } else {
             SelectionViewParams::picker()
         };
-        params.preferred_dialog_width = Some(100);
+        if self.model_switcher_overlay {
+            params.preferred_dialog_width = Some(88);
+            params.picker_surface = crate::bottom_pane::PickerSurface::Switcher;
+            params.reserve_result_rows = true;
+        }
         params
     }
 

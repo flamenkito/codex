@@ -255,14 +255,7 @@ async fn popup_preserves_background_outside_its_rectangle_and_clears_its_interio
         terminal.set_viewport_area(Rect::new(0, 0, width, height));
         let mut frame = terminal.get_frame();
         super::super::layout::render(&mut frame, &state);
-        let panel_width = width.min(104);
-        let panel_height = height.min(16);
-        let panel = Rect::new(
-            (width - panel_width) / 2,
-            (height - panel_height) / 2,
-            panel_width,
-            panel_height,
-        );
+        let panel = super::super::layout::panel(&state, Rect::new(0, 0, width, height));
         for y in 0..height {
             for x in 0..width {
                 let position = ratatui::layout::Position::new(x, y);
@@ -280,6 +273,67 @@ async fn popup_preserves_background_outside_its_rectangle_and_clears_its_interio
             for x in 0..width.min(120) {
                 assert_eq!(frame.buffer[(x, y)].symbol(), "X");
             }
+        }
+    }
+}
+
+#[tokio::test]
+async fn popup_matches_opencode_geometry_surface_and_footer() {
+    use crate::custom_terminal::Terminal;
+    use crate::test_backend::VT100Backend;
+
+    let mut state = state();
+    let id = ThreadId::new();
+    state.all_rows = vec![row(id, "2026-10-31T12:00:00Z", "Session")];
+    state.apply_filter();
+    let viewport = Rect::new(0, 0, 140, 30);
+    let populated_panel = super::super::layout::panel(&state, viewport);
+    assert_eq!(populated_panel.width, 88);
+    assert_eq!(populated_panel.height, 11);
+    let mut terminal = Terminal::with_options(VT100Backend::new(140, 30)).unwrap();
+    terminal.set_viewport_area(Rect::new(0, 0, 140, 30));
+    let mut frame = terminal.get_frame();
+    super::super::layout::render(&mut frame, &state);
+    let rendered = frame
+        .buffer
+        .content
+        .chunks(140)
+        .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    assert!(rendered.contains("Sessions"));
+    assert!(rendered.contains("esc"));
+    assert!(rendered.contains("pin/unpin ctrl+f"));
+    assert!(!rendered.contains('┌'));
+    assert!(!rendered.contains('│'));
+    let title = rendered.find("Sessions").unwrap();
+    let escape = rendered.find("esc").unwrap();
+    assert!((74..88).contains(&escape.saturating_sub(title)));
+    assert_eq!(
+        frame.buffer[(populated_panel.x, populated_panel.y)]
+            .style()
+            .bg,
+        crate::bottom_pane::switcher_surface_style().bg
+    );
+
+    state.filtered_rows.clear();
+    assert_eq!(
+        super::super::layout::panel(&state, viewport),
+        populated_panel
+    );
+    let mut empty_terminal = Terminal::with_options(VT100Backend::new(140, 30)).unwrap();
+    empty_terminal.set_viewport_area(viewport);
+    let mut empty_frame = empty_terminal.get_frame();
+    super::super::layout::render(&mut empty_frame, &state);
+    let surface = crate::bottom_pane::switcher_surface_style().bg.unwrap();
+    for y in populated_panel.top()..populated_panel.bottom() {
+        for x in populated_panel.left()..populated_panel.right() {
+            assert_eq!(
+                empty_frame.buffer[(x, y)].bg,
+                surface,
+                "empty state replaced popup surface at {x},{y}"
+            );
         }
     }
 }

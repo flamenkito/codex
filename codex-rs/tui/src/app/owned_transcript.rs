@@ -356,6 +356,9 @@ impl App {
                         screen_size.width,
                         screen_size.height,
                     );
+                    if dialog.dims_backdrop() {
+                        crate::bottom_pane::dim_switcher_backdrop(area, frame.buffer);
+                    }
                     dialog.render(area, frame.buffer);
                     (dialog, area)
                 } else {

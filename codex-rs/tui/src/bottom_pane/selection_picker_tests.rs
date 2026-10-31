@@ -218,6 +218,7 @@ fn overflow_arrows_follow_the_painted_picker_surface() {
                     );
                     let background = match surface {
                         PickerSurface::Panel => crate::style::user_message_style().bg.unwrap(),
+                        PickerSurface::Switcher => super::switcher_surface_style().bg.unwrap(),
                         PickerSurface::Terminal => Color::Reset,
                     };
                     let arrows = (0..buf.area.height)

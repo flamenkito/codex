@@ -72,6 +72,12 @@ impl Renderable for ViewStack<'_> {
 /// A dialog placed within the supplied viewport, without taking over its backdrop.
 pub(crate) struct CenteredView<'a>(pub(crate) &'a dyn BottomPaneView);
 
+impl CenteredView<'_> {
+    pub(crate) fn dims_backdrop(&self) -> bool {
+        self.0.dim_backdrop()
+    }
+}
+
 impl Renderable for CenteredView<'_> {
     fn render(&self, area: Rect, buf: &mut Buffer) {
         let dialog = dialog_area(self.0, area);
@@ -107,6 +113,9 @@ pub(crate) struct DialogOverlay<'a> {
 impl Renderable for DialogOverlay<'_> {
     fn render(&self, area: Rect, buf: &mut Buffer) {
         self.backdrop.render(area, buf);
+        if self.dialog.0.dim_backdrop() {
+            super::dim_switcher_backdrop(area, buf);
+        }
         self.dialog.render(area, buf);
     }
 

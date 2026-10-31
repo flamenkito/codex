@@ -38,6 +38,11 @@ pub(crate) trait BottomPaneView: Renderable {
         None
     }
 
+    /// Dim the retained view before painting this centered dialog.
+    fn dim_backdrop(&self) -> bool {
+        false
+    }
+
     /// Refresh an open configuration panel, including one below a child editor.
     /// Returns whether this view contains a configuration panel.
     fn update_config_panel(&mut self, _update: &crate::config_panel::ConfigPanelUpdate) -> bool {
