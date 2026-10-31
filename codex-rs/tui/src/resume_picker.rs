@@ -416,7 +416,7 @@ struct SessionPickerRunOptions {
     view_persistence: Option<SessionPickerViewPersistence>,
     keymap: RuntimeKeymap,
     initial_page_mode: PageLoadMode,
-    compact_switcher: bool,
+    compact_switcher: Option<ratatui::buffer::Buffer>,
 }
 
 /// Interactive session picker that lists app-server threads with simple search,
@@ -455,7 +455,7 @@ pub async fn run_resume_picker_with_app_server(
         app_server,
         archive_request_handle,
         SessionPickerLaunchContext::Startup,
-        false,
+        None,
     )
     .await
 }
@@ -474,7 +474,7 @@ pub async fn run_resume_picker_from_existing_session_with_app_server(
     app_server: AppServerSession,
     archive_request_handle: AppServerRequestHandle,
     current_thread_id: Option<ThreadId>,
-    compact_switcher: bool,
+    compact_switcher: Option<ratatui::buffer::Buffer>,
 ) -> Result<SessionSelection> {
     run_resume_picker_with_launch_context(
         uses_remote_filesystem,
@@ -505,7 +505,7 @@ async fn run_resume_picker_with_launch_context(
     app_server: AppServerSession,
     archive_request_handle: AppServerRequestHandle,
     launch_context: SessionPickerLaunchContext,
-    compact_switcher: bool,
+    compact_switcher: Option<ratatui::buffer::Buffer>,
 ) -> Result<SessionSelection> {
     let (bg_tx, bg_rx) = mpsc::unbounded_channel();
     let uses_remote_workspace = app_server.uses_remote_workspace();
@@ -591,7 +591,7 @@ pub async fn run_fork_picker_with_app_server(
         filter_cwd: cwd_filter,
         local_filter_cwd,
         action: SessionPickerAction::Fork,
-        compact_switcher: false,
+        compact_switcher: None,
         launch_context: SessionPickerLaunchContext::Startup,
         provider_filter,
         initial_density: SessionListDensity::from(
@@ -649,7 +649,7 @@ async fn run_session_picker_event_loop(
             let _ = repo_filter_tx.send(local_repo_filter_available(&cwd));
         });
     }
-    let alt = AltScreenGuard::enter(tui);
+    let alt = AltScreenGuard::enter(tui, options.compact_switcher.as_ref());
     let mut state = PickerState::new(
         options.backend_id,
         alt.tui.frame_requester(),
@@ -672,7 +672,8 @@ async fn run_session_picker_event_loop(
     state.keymap = options.keymap;
     state.launch_context = options.launch_context;
     state.initial_page_mode = options.initial_page_mode;
-    if options.compact_switcher {
+    if let Some(background) = options.compact_switcher {
+        state.switcher_background = Some(background);
         state.switcher = Some(switcher::SessionSwitcher::load(&local_switcher_path(
             &state,
         )));
@@ -969,22 +970,34 @@ fn sort_key_label(sort_key: ThreadSortKey) -> &'static str {
 /// RAII guard that ensures we leave the alt-screen on scope exit.
 struct AltScreenGuard<'a> {
     tui: &'a mut Tui,
+    restore: Option<ratatui::buffer::Buffer>,
 }
 
 impl<'a> AltScreenGuard<'a> {
-    fn enter(tui: &'a mut Tui) -> Self {
+    fn enter(tui: &'a mut Tui, background: Option<&ratatui::buffer::Buffer>) -> Self {
+        let restore = tui
+            .is_alt_screen_active()
+            .then(|| background.cloned())
+            .flatten();
         let _ = tui.enter_alt_screen();
-        Self { tui }
+        Self { tui, restore }
     }
 }
 
 impl Drop for AltScreenGuard<'_> {
     fn drop(&mut self) {
+        if let Some(background) = &self.restore {
+            let height = self.tui.terminal.last_known_screen_size.height;
+            let _ = self
+                .tui
+                .draw(height, |frame| layout::render_background(frame, background));
+        }
         let _ = self.tui.leave_alt_screen();
     }
 }
 
 struct PickerState {
+    switcher_background: Option<ratatui::buffer::Buffer>,
     backend_id: crate::backend_id::BackendId,
     clock_format: ClockFormat,
     use_theme_colors: bool,
@@ -1195,6 +1208,7 @@ impl PickerState {
     ) -> Self {
         Self {
             backend_id,
+            switcher_background: None,
             clock_format: ClockFormat::system(),
             use_theme_colors: true,
             copy_on_select: false,

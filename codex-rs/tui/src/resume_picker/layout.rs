@@ -74,7 +74,23 @@ pub(super) fn list_area(state: &PickerState, area: Rect) -> Rect {
     areas(content_area(state, area)).list
 }
 
+/// Copy only the visible intersection, including on a resize while the popup is open.
+pub(super) fn render_background(
+    frame: &mut crate::custom_terminal::Frame,
+    background: &ratatui::buffer::Buffer,
+) {
+    let area = frame.area().intersection(background.area);
+    for y in area.top()..area.bottom() {
+        for x in area.left()..area.right() {
+            frame.buffer[(x, y)] = background[(x, y)].clone();
+        }
+    }
+}
+
 pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerState) {
+    if let Some(background) = &state.switcher_background {
+        render_background(frame, background);
+    }
     let PickerAreas {
         header,
         toolbar,
@@ -83,6 +99,7 @@ pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerSt
         footer,
     } = areas(content_area(state, frame.area()));
     if state.switcher.is_some() {
+        frame.render_widget_ref(&ratatui::widgets::Clear, panel(state, frame.area()));
         frame.render_widget_ref(
             &ratatui::widgets::Block::bordered().border_style(crate::style::secondary_text_style()),
             panel(state, frame.area()),

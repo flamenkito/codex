@@ -235,3 +235,51 @@ async fn mutation_completion_cannot_rename_another_backends_copy() {
     assert_eq!(state.all_rows[0].display_preview(), "Local");
     assert_eq!(state.all_rows[1].display_preview(), "Remote renamed");
 }
+
+#[tokio::test]
+async fn popup_preserves_background_outside_its_rectangle_and_clears_its_interior() {
+    use crate::custom_terminal::Terminal;
+    use crate::test_backend::VT100Backend;
+    use ratatui::buffer::Buffer;
+
+    let mut state = state();
+    let original_area = Rect::new(0, 0, 120, 40);
+    let mut background = Buffer::empty(original_area);
+    for cell in &mut background.content {
+        cell.set_symbol("X");
+    }
+    state.switcher_background = Some(background.clone());
+    // Exercise clipping on both shrinking and growing terminals as well as normal size.
+    for (width, height) in [(120, 40), (80, 20), (140, 50)] {
+        let mut terminal = Terminal::with_options(VT100Backend::new(width, height)).unwrap();
+        terminal.set_viewport_area(Rect::new(0, 0, width, height));
+        let mut frame = terminal.get_frame();
+        super::super::layout::render(&mut frame, &state);
+        let panel_width = width.min(104);
+        let panel_height = height.min(16);
+        let panel = Rect::new(
+            (width - panel_width) / 2,
+            (height - panel_height) / 2,
+            panel_width,
+            panel_height,
+        );
+        for y in 0..height {
+            for x in 0..width {
+                let position = ratatui::layout::Position::new(x, y);
+                let symbol = frame.buffer[(x, y)].symbol();
+                if panel.contains(position) {
+                    assert_ne!(symbol, "X", "background leaked into popup at {x},{y}");
+                } else if original_area.contains(position) {
+                    assert_eq!(symbol, "X", "background erased at {x},{y}");
+                }
+            }
+        }
+        // Closing the popup restores cells formerly covered by it.
+        super::super::layout::render_background(&mut frame, &background);
+        for y in 0..height.min(40) {
+            for x in 0..width.min(120) {
+                assert_eq!(frame.buffer[(x, y)].symbol(), "X");
+            }
+        }
+    }
+}
