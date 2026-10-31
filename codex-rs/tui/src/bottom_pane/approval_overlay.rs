@@ -855,7 +855,7 @@ fn exec_options(
     additional_permissions: Option<&AdditionalPermissionProfile>,
     keymap: &ApprovalKeymap,
 ) -> Vec<ApprovalOption> {
-    available_decisions
+    let options = available_decisions
         .iter()
         .filter_map(|decision| match decision {
             CommandExecutionApprovalDecision::Accept => Some(ApprovalOption {
@@ -934,7 +934,79 @@ fn exec_options(
                 shortcuts: keymap.decline.clone(),
             }),
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    let mut expanded = Vec::new();
+    for option in options {
+        let broader = match &option.decision {
+            ApprovalDecision::Command(
+                CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                    execpolicy_amendment,
+                },
+            ) => broader_execpolicy_amendment(execpolicy_amendment),
+            _ => None,
+        };
+        expanded.push(option);
+        if let Some(execpolicy_amendment) = broader {
+            let command = strip_bash_lc_and_escape(&execpolicy_amendment.command);
+            expanded.push(ApprovalOption {
+                label: format!(
+                    "Yes, and don't ask again for any `{command}` command (any arguments)"
+                ),
+                decision: ApprovalDecision::Command(
+                    CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                        execpolicy_amendment,
+                    },
+                ),
+                // Keep `p` on the suggested prefix; use navigation for this broader choice.
+                shortcuts: Vec::new(),
+            });
+        }
+    }
+    expanded
+}
+
+/// Broaden plain executable prefixes, excluding shell and interpreter wrappers.
+fn broader_execpolicy_amendment(
+    amendment: &codex_app_server_protocol::ExecPolicyAmendment,
+) -> Option<codex_app_server_protocol::ExecPolicyAmendment> {
+    let executable = amendment.command.first()?;
+    if amendment.command.len() <= 1
+        || executable.is_empty()
+        || executable.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    let name = executable.rsplit(['/', '\\']).next()?;
+    if matches!(
+        name,
+        "sh" | "bash"
+            | "zsh"
+            | "fish"
+            | "dash"
+            | "ksh"
+            | "nu"
+            | "cmd"
+            | "cmd.exe"
+            | "powershell"
+            | "powershell.exe"
+            | "pwsh"
+            | "pwsh.exe"
+            | "env"
+            | "sudo"
+            | "doas"
+            | "xargs"
+            | "python"
+            | "python3"
+            | "node"
+            | "ruby"
+            | "perl"
+    ) {
+        return None;
+    }
+    Some(codex_app_server_protocol::ExecPolicyAmendment {
+        command: vec![executable.clone()],
+    })
 }
 
 pub(crate) fn format_additional_permissions_rule(
@@ -1705,6 +1777,70 @@ mod tests {
         assert_snapshot!(
             "approval_overlay_cross_thread_prompt",
             render_overlay_lines(&view, /*width*/ 80)
+        );
+    }
+
+    #[test]
+    fn broader_prefix_option_keeps_suggested_rule_and_emits_executable_rule() {
+        let decisions = vec![
+            CommandExecutionApprovalDecision::Accept,
+            CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                execpolicy_amendment: ExecPolicyAmendment {
+                    command: vec!["lsof".into(), "-nP".into(), "+L1".into()],
+                },
+            },
+            CommandExecutionApprovalDecision::Cancel,
+        ];
+        let options = exec_options(
+            &decisions,
+            None,
+            None,
+            &crate::keymap::RuntimeKeymap::defaults().approval,
+        );
+        assert_eq!(options.len(), 4);
+        assert!(options[1].label.contains("lsof -nP +L1"));
+        assert!(options[2].label.contains("`lsof` command (any arguments)"));
+        assert!(options[2].shortcuts.is_empty());
+        assert_eq!(
+            command_decision_to_review_decision(match &options[2].decision {
+                ApprovalDecision::Command(decision) => decision,
+                _ => panic!("expected command decision"),
+            }),
+            ReviewDecision::ApprovedExecpolicyAmendment {
+                proposed_execpolicy_amendment: ExecPolicyAmendment {
+                    command: vec!["lsof".into()],
+                }
+                .into_core(),
+            },
+        );
+    }
+
+    #[test]
+    fn broader_prefix_omits_duplicates_empty_commands_and_wrappers() {
+        for command in [
+            vec![],
+            vec!["lsof"],
+            vec!["", "arg"],
+            vec!["zsh", "-lc", "lsof -nP +L1"],
+            vec!["/bin/bash", "-c", "echo hi"],
+            vec!["env", "lsof", "-nP"],
+            vec!["python3", "-c", "print(1)"],
+            vec!["bad\ncommand", "arg"],
+        ] {
+            assert!(
+                broader_execpolicy_amendment(&ExecPolicyAmendment {
+                    command: command.into_iter().map(str::to_owned).collect(),
+                })
+                .is_none()
+            );
+        }
+        assert_eq!(
+            broader_execpolicy_amendment(&ExecPolicyAmendment {
+                command: vec!["/usr/sbin/diskutil".into(), "info".into()],
+            }),
+            Some(ExecPolicyAmendment {
+                command: vec!["/usr/sbin/diskutil".into()],
+            })
         );
     }
 
