@@ -5201,6 +5201,7 @@
               "leader": null,
               "open_agents": null,
               "open_external_editor": null,
+              "open_models": null,
               "open_sessions": null,
               "open_transcript": null,
               "queue": null,
@@ -6044,6 +6045,14 @@
           ],
           "description": "Open the external editor for the current draft."
         },
+        "open_models": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Open the compact model switcher."
+        },
         "open_sessions": {
           "allOf": [
             {
@@ -6243,6 +6252,7 @@
             "leader": null,
             "open_agents": null,
             "open_external_editor": null,
+            "open_models": null,
             "open_sessions": null,
             "open_transcript": null,
             "queue": null,

@@ -520,6 +520,7 @@ impl KeyChordMatcher {
             let label = match binding.action.action {
                 "open_presets" if pending.started_at.is_none() => "presets",
                 "open_sessions" => "sessions",
+                "open_models" => "models",
                 "focus_activity" => "activity",
                 "find_transcript" => "find",
                 "open_warnings" => "warnings",

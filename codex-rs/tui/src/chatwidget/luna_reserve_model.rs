@@ -59,7 +59,7 @@ impl ChatWidget {
                     dismiss_parent_on_child_accept: !single_supported_effort,
                     ..Default::default()
                 }],
-                ..SelectionViewParams::picker()
+                ..self.model_picker_params()
             },
         );
     }

@@ -286,6 +286,7 @@ define_runtime_action_bindings! {
     "global" => Global, app, global [
         open_agents,
         open_sessions,
+        open_models,
         open_transcript,
         find_transcript,
         select_transcript,

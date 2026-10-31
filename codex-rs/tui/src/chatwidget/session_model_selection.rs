@@ -63,7 +63,13 @@ impl ChatWidget {
         if model == LUNA_RESERVE_MODEL {
             return None;
         }
-        let key = key_hint::plain(KeyCode::Char('s'));
+        // Printable keys belong to the searchable overlay; retain the session-only action
+        // on a control key there, including in its reasoning submenus.
+        let key = if self.model_switcher_overlay {
+            key_hint::ctrl(KeyCode::Char('s'))
+        } else {
+            key_hint::plain(KeyCode::Char('s'))
+        };
         let keymap = self.bottom_pane.list_keymap();
         let mut hints = Vec::new();
         if let Some(accept) = keymap.primary_hint(ListAction::Accept) {

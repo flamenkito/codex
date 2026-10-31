@@ -31,6 +31,13 @@ pub(in crate::keymap) fn register(keymap: &TuiKeymap, resolved: &mut RuntimeKeym
             "leader l",
         ),
         (
+            keymap.global.open_models.as_ref(),
+            KeymapContext::Global,
+            "open_models",
+            'm',
+            "leader m",
+        ),
+        (
             keymap.global.select_transcript.as_ref(),
             KeymapContext::Global,
             "select_transcript",

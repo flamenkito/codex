@@ -139,6 +139,8 @@ pub struct TuiGlobalKeymap {
     pub open_agents: Option<KeybindingsSpec>,
     /// Open the compact session switcher.
     pub open_sessions: Option<KeybindingsSpec>,
+    /// Open the compact model switcher.
+    pub open_models: Option<KeybindingsSpec>,
     /// Open the transcript overlay.
     pub open_transcript: Option<KeybindingsSpec>,
     /// Find text in the full transcript.

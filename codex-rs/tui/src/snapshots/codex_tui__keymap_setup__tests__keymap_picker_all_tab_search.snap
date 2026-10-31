@@ -2,6 +2,8 @@
 source: tui/src/keymap_setup.rs
 expression: snapshot
 ---
+Open Sessions | leader l (ctrl-x l) | Global open_sessions Open Sessions Open the searchable session switcher. leader l (ctrl-x l) Default
+Open Models | leader m (ctrl-x m) | Global open_models Open Models Open the searchable model switcher. leader m (ctrl-x m) Default
 Open Agents | unbound | Global open_agents Open Agents Open the shared agent-session overview. unbound Default
 Open Transcript | ctrl-t | Global open_transcript Open Transcript Open the transcript overlay. ctrl-t Default
 Find Transcript | f3 | Global find_transcript Find Transcript Find text in the full transcript. f3 Default
@@ -12,5 +14,3 @@ Clear Terminal | ctrl-l | Global clear_terminal Clear Terminal Clear the termina
 Toggle Vim Mode | unbound | Global toggle_vim_mode Toggle Vim Mode Turn Vim composer mode on or off. unbound Default
 Toggle Raw Output | alt-r | Global toggle_raw_output Toggle Raw Output Toggle raw scrollback mode. alt-r Default
 Toggle Side Conversation | ctrl-/ | Global toggle_side_conversation Toggle Side Conversation Switch between a side conversation and its parent. ctrl-/ Default
-Leader | ctrl-x | Global leader Leader Set the prefix used by shared leader shortcuts. ctrl-x Default
-Interrupt Turn | esc | Chat interrupt_turn Interrupt Turn Interrupt the active turn. esc Default

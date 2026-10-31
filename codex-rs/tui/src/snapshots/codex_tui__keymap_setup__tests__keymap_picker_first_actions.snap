@@ -2,11 +2,11 @@
 source: tui/src/keymap_setup.rs
 expression: snapshot
 ---
-tab: All (153 selectable)
+tab: All (155 selectable)
 tab: Common (20 selectable)
 tab: Customized (0) (0 selectable)
 tab: Unbound (5) (5 selectable)
-tab: App (22 selectable)
+tab: App (24 selectable)
 tab: Composer (5 selectable)
 tab: Editor (17 selectable)
 tab: Vim (69 selectable)
@@ -14,6 +14,8 @@ tab: Navigation (21 selectable)
 tab: Agents (11 selectable)
 tab: Approval (8 selectable)
 tab: Debug (1 selectable)
+Open Sessions | leader l (ctrl-x l) | Global open_sessions Open Sessions Open the searchable session switcher. leader l (ctrl-x l) Default
+Open Models | leader m (ctrl-x m) | Global open_models Open Models Open the searchable model switcher. leader m (ctrl-x m) Default
 Open Agents | unbound | Global open_agents Open Agents Open the shared agent-session overview. unbound Default
 Open Transcript | ctrl-t | Global open_transcript Open Transcript Open the transcript overlay. ctrl-t Default
 Find Transcript | f3 | Global find_transcript Find Transcript Find text in the full transcript. f3 Default
@@ -25,5 +27,3 @@ Toggle Vim Mode | unbound | Global toggle_vim_mode Toggle Vim Mode Turn Vim comp
 Toggle Raw Output | alt-r | Global toggle_raw_output Toggle Raw Output Toggle raw scrollback mode. alt-r Default
 Toggle Side Conversation | ctrl-/ | Global toggle_side_conversation Toggle Side Conversation Switch between a side conversation and its parent. ctrl-/ Default
 Leader | ctrl-x | Global leader Leader Set the prefix used by shared leader shortcuts. ctrl-x Default
-Interrupt Turn | esc | Chat interrupt_turn Interrupt Turn Interrupt the active turn. esc Default
-Decrease Reasoning Effort | alt-,, shift-down | Chat decrease_reasoning_effort Decrease Reasoning Effort Decrease reasoning effort. alt-,, shift-down Default

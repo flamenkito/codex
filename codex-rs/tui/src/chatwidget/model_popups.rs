@@ -14,6 +14,25 @@ impl ChatWidget {
     /// Open a popup to choose a quick auto model. Selecting "All models"
     /// opens the full picker with every available preset.
     pub(crate) fn open_model_popup(&mut self) {
+        self.model_switcher_overlay = false;
+        self.open_model_popup_impl();
+    }
+
+    /// Open the leader shortcut's model menu without replacing the composer or stopping work.
+    pub(crate) fn open_model_switcher(&mut self) {
+        self.model_switcher_overlay = true;
+        self.open_model_popup_impl();
+    }
+
+    pub(super) fn model_picker_params(&self) -> SelectionViewParams {
+        if self.model_switcher_overlay {
+            SelectionViewParams::confirmation()
+        } else {
+            SelectionViewParams::picker()
+        }
+    }
+
+    fn open_model_popup_impl(&mut self) {
         if !self.is_session_configured() {
             self.add_info_message(
                 "Model selection is disabled until startup completes.".to_string(),
@@ -34,7 +53,11 @@ impl ChatWidget {
         };
         let request_id = uuid::Uuid::new_v4();
         self.model_popup_request_id = Some(request_id);
-        self.open_model_popup_with_presets(presets);
+        if self.model_switcher_overlay {
+            self.open_all_models_popup();
+        } else {
+            self.open_model_popup_with_presets(presets);
+        }
         // Show cached choices immediately and update any still-present picker when the reply arrives.
         self.app_event_tx.send(AppEvent::FetchModels { request_id });
     }
@@ -190,9 +213,10 @@ impl ChatWidget {
             model_ids,
             SelectionViewParams {
                 view_id: Some(MODEL_SELECTION_VIEW_ID),
+                is_searchable: self.model_switcher_overlay,
                 items,
                 header,
-                ..SelectionViewParams::picker()
+                ..self.model_picker_params()
             },
         );
     }
@@ -223,7 +247,10 @@ impl ChatWidget {
             .try_list_models()
             .unwrap_or_default()
             .into_iter()
-            .filter(|preset| preset.show_in_picker && !Self::is_auto_model(&preset.model))
+            .filter(|preset| {
+                preset.show_in_picker
+                    && (self.model_switcher_overlay || !Self::is_auto_model(&preset.model))
+            })
             .collect();
         self.open_all_models_popup_with_view_id(presets, ALL_MODELS_SELECTION_VIEW_ID);
     }
@@ -281,9 +308,10 @@ impl ChatWidget {
             model_ids,
             SelectionViewParams {
                 view_id: Some(view_id),
+                is_searchable: self.model_switcher_overlay,
                 items,
                 header,
-                ..SelectionViewParams::picker()
+                ..self.model_picker_params()
             },
         );
     }
@@ -461,7 +489,7 @@ impl ChatWidget {
                     ..Default::default()
                 },
             ],
-            ..SelectionViewParams::picker()
+            ..self.model_picker_params()
         });
         self.notify(Notification::PlanModePrompt {
             title: PLAN_MODE_REASONING_SCOPE_TITLE.to_string(),
@@ -639,7 +667,7 @@ impl ChatWidget {
             header: Box::new(header),
             items,
             initial_selected_idx,
-            ..SelectionViewParams::picker()
+            ..self.model_picker_params()
         });
     }
 
@@ -705,7 +733,7 @@ impl ChatWidget {
         self.bottom_pane.show_selection_view(SelectionViewParams {
             header: Box::new(header),
             items,
-            ..SelectionViewParams::picker()
+            ..self.model_picker_params()
         });
     }
 

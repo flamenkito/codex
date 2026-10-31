@@ -674,3 +674,41 @@ fn session_switcher_default_leader_binding_yields_to_customization() {
             .any(|binding| binding.action.action == "open_agents" && binding.spec == "leader l")
     );
 }
+
+#[test]
+fn model_switcher_default_leader_binding_yields_to_customization() {
+    let default = RuntimeKeymap::defaults();
+    assert!(
+        default.chords.bindings.iter().any(|binding| {
+            binding.action.action == "open_models" && binding.spec == "leader m"
+        })
+    );
+    let mut config = TuiKeymap::default();
+    config.global.open_models = Some(KeybindingsSpec::Many(vec![]));
+    let disabled = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        !disabled
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_models")
+    );
+    config.global.open_models = None;
+    config.global.open_agents = Some(binding("leader m"));
+    let customized = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        !customized
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "open_models")
+    );
+    config.global.open_models = Some(binding("f6"));
+    let explicit = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        explicit
+            .app
+            .open_models
+            .is_pressed(KeyEvent::new(KeyCode::F(6), KeyModifiers::NONE))
+    );
+}
