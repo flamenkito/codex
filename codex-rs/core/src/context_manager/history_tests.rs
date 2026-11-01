@@ -2943,8 +2943,7 @@ fn normalize_adds_missing_output_for_tool_search_call() {
 
 #[cfg(debug_assertions)]
 #[test]
-#[should_panic]
-fn normalize_adds_missing_output_for_custom_tool_call_panics_in_debug() {
+fn normalize_adds_missing_output_for_custom_tool_call_recovers_in_debug() {
     let items = vec![ResponseItem::CustomToolCall {
         encrypted_content: None,
         id: None,
@@ -2957,6 +2956,28 @@ fn normalize_adds_missing_output_for_custom_tool_call_panics_in_debug() {
     }];
     let mut h = create_history_with_items(items);
     h.normalize_history(&default_input_modalities());
+    assert_eq!(
+        raw_items(&h),
+        vec![
+            ResponseItem::CustomToolCall {
+                encrypted_content: None,
+                id: None,
+                status: None,
+                call_id: "tool-x".to_string(),
+                name: "custom".to_string(),
+                namespace: None,
+                input: "{}".to_string(),
+                internal_chat_message_metadata_passthrough: None,
+            },
+            ResponseItem::CustomToolCallOutput {
+                id: None,
+                call_id: "tool-x".to_string(),
+                name: None,
+                output: FunctionCallOutputPayload::from_text("aborted".to_string()),
+                internal_chat_message_metadata_passthrough: None,
+            },
+        ]
+    );
 }
 
 #[cfg(debug_assertions)]
