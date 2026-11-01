@@ -1642,6 +1642,7 @@ pub(crate) enum AppEvent {
         cwd: PathBuf,
         branch: Option<String>,
     },
+    SidebarDirtyFilesUpdated { cwd: PathBuf, count: Option<usize> },
     /// Async update of Git summary fields for status line rendering.
     StatusLineGitSummaryUpdated {
         cwd: PathBuf,

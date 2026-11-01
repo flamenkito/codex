@@ -23,6 +23,35 @@ fn composer() -> ChatComposer {
 }
 
 #[test]
+fn composer_input_and_model_metadata_share_the_same_padding() {
+    let mut composer = composer();
+    composer.set_status_line_enabled(false);
+    for width in [24, 80] {
+        let options = composer.resolve_render_options(ComposerRenderOptions::default());
+        let area = Rect::new(
+            2,
+            1,
+            width,
+            composer.desired_height_with_options(width, options),
+        );
+        let layout = composer.layout_with_options(area, options);
+        let mut buffer = Buffer::empty(Rect::new(0, 0, area.right(), area.bottom()));
+        composer.render_with_options(area, &mut buffer, None, options);
+        let content_x = layout.composer.x + 3;
+        assert_eq!(layout.textarea.x, content_x);
+        assert_eq!(buffer[(content_x, layout.textarea.y)].symbol(), "A");
+        assert_eq!(
+            buffer[(content_x, layout.composer.bottom() - 2)].symbol(),
+            "M"
+        );
+        assert_eq!(
+            composer.cursor_pos_with_options(area, options),
+            Some((content_x, layout.textarea.y))
+        );
+    }
+}
+
+#[test]
 fn extension_status_line_clips_links_to_footer_layout() {
     let mut composer = composer();
     let tree = serde_json::from_value(serde_json::json!({

@@ -168,6 +168,8 @@ mod shortcut_overlay;
 pub(crate) use picker_style::active_tab_style;
 pub(crate) use picker_style::dim_switcher_backdrop;
 pub(crate) use picker_style::selection_style;
+pub(crate) use picker_style::switcher_group_style;
+pub(crate) use picker_style::switcher_secondary_style;
 pub(crate) use picker_style::switcher_selection_style;
 pub(crate) use picker_style::switcher_surface_style;
 pub(crate) use shortcut_hud::ShortcutHud;
@@ -178,7 +180,6 @@ mod skills_toggle_view;
 pub(crate) mod slash_commands;
 pub(crate) use footer::CollaborationModeIndicator;
 pub(crate) use footer::GoalStatusIndicator;
-#[cfg(test)]
 pub(crate) use footer::goal_status_indicator_line;
 pub(crate) use list_selection_view::ColumnWidthMode;
 pub(crate) use list_selection_view::ListSelectionView;

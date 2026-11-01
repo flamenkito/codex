@@ -676,6 +676,26 @@ fn session_switcher_default_leader_binding_yields_to_customization() {
 }
 
 #[test]
+fn new_session_default_leader_binding_yields_to_customization() {
+    let default = RuntimeKeymap::defaults();
+    assert!(
+        default.chords.bindings.iter().any(|binding| {
+            binding.action.action == "new_session" && binding.spec == "leader n"
+        })
+    );
+    let mut config = TuiKeymap::default();
+    config.global.new_session = Some(KeybindingsSpec::Many(vec![]));
+    let disabled = RuntimeKeymap::from_config(&config).unwrap();
+    assert!(
+        !disabled
+            .chords
+            .bindings
+            .iter()
+            .any(|binding| binding.action.action == "new_session")
+    );
+}
+
+#[test]
 fn model_switcher_default_leader_binding_yields_to_customization() {
     let default = RuntimeKeymap::defaults();
     assert!(

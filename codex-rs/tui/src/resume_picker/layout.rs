@@ -57,7 +57,7 @@ fn areas_with_footer(area: Rect, footer_height: u16, min_list_rows: u16) -> Pick
 pub(super) fn panel(state: &PickerState, area: Rect) -> Rect {
     let width = area
         .width
-        .saturating_sub(/*rhs*/ 4)
+        .saturating_sub(/*rhs*/ 2)
         .min(88)
         .max(area.width.min(8));
     // Size from the scoped catalog, not the query result, so searching never
@@ -67,11 +67,13 @@ pub(super) fn panel(state: &PickerState, area: Rect) -> Rect {
         .iter()
         .filter(|row| state.row_matches_filter(row))
         .count();
-    let desired_height = (catalog_rows.min(8) + 10).clamp(11, 18) as u16;
+    // Eight chrome rows, plus the group heading and overflow indicator. Reserve
+    // four actual sessions rather than counting those decorations as sessions.
+    let desired_height = (catalog_rows.min(4) + 10).clamp(11, 14) as u16;
     let height = area.height.min(desired_height);
     Rect::new(
         area.x + (area.width - width) / 2,
-        area.y + (area.height - height) / 2,
+        area.y + (area.height / 4).min(area.height - height),
         width,
         height,
     )
@@ -79,7 +81,7 @@ pub(super) fn panel(state: &PickerState, area: Rect) -> Rect {
 
 fn content_area(state: &PickerState, area: Rect) -> Rect {
     if state.switcher.is_some() {
-        panel(state, area).inner(ratatui::layout::Margin::new(2, 1))
+        panel(state, area).inner(ratatui::layout::Margin::new(3, 1))
     } else {
         area
     }
@@ -106,7 +108,13 @@ fn picker_areas(state: &PickerState, area: Rect) -> PickerAreas {
             header,
             toolbar: Rect::default(),
             search,
-            list,
+            // The list renderer's gutter places labels at the shared chrome column.
+            list: Rect::new(
+                list.x.saturating_sub(2),
+                list.y,
+                list.width.saturating_add(4),
+                list.height,
+            ),
             footer,
         }
     } else {
@@ -167,7 +175,7 @@ pub(super) fn render(frame: &mut crate::custom_terminal::Frame, state: &PickerSt
             &Line::from(vec![
                 "Sessions".bold(),
                 Span::raw(" ".repeat(usize::from(gap))),
-                Span::styled(escape, crate::style::secondary_text_style()),
+                Span::styled(escape, crate::bottom_pane::switcher_secondary_style()),
             ]),
             header,
         );

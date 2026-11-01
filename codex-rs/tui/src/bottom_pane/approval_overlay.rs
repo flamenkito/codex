@@ -289,6 +289,10 @@ impl ApprovalOverlay {
                         request.network_approval_context.as_ref(),
                         request.additional_permissions.as_ref(),
                         approval_keymap,
+                        request
+                            .environment_id
+                            .as_deref()
+                            .is_none_or(|id| id == "local"),
                     ),
                     title,
                 )
@@ -839,6 +843,11 @@ fn command_decision_to_review_decision(
         } => ReviewDecision::ApprovedExecpolicyAmendment {
             proposed_execpolicy_amendment: execpolicy_amendment.clone().into_core(),
         },
+        CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment {
+            execpolicy_amendment,
+        } => ReviewDecision::ApprovedProjectExecpolicyAmendment {
+            proposed_execpolicy_amendment: execpolicy_amendment.clone().into_core(),
+        },
         CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
             network_policy_amendment,
         } => ReviewDecision::NetworkPolicyAmendment {
@@ -854,6 +863,7 @@ fn exec_options(
     network_approval_context: Option<&NetworkApprovalContext>,
     additional_permissions: Option<&AdditionalPermissionProfile>,
     keymap: &ApprovalKeymap,
+    project_local_allowed: bool,
 ) -> Vec<ApprovalOption> {
     let options = available_decisions
         .iter()
@@ -887,6 +897,9 @@ fn exec_options(
                     shortcuts: keymap.approve_for_prefix.clone(),
                 })
             }
+            CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment {
+                execpolicy_amendment,
+            } => Some(project_exec_option(execpolicy_amendment.clone())),
             CommandExecutionApprovalDecision::AcceptForSession => Some(ApprovalOption {
                 label: if network_approval_context.is_some() {
                     "Yes, and allow this host for this conversation".to_string()
@@ -938,6 +951,19 @@ fn exec_options(
 
     let mut expanded = Vec::new();
     for option in options {
+        let project_amendment = match &option.decision {
+            ApprovalDecision::Command(
+                CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                    execpolicy_amendment,
+                },
+            ) if project_local_allowed
+                && network_approval_context.is_none()
+                && additional_permissions.is_none() =>
+            {
+                project_execpolicy_amendment(execpolicy_amendment)
+            }
+            _ => None,
+        };
         let broader = match &option.decision {
             ApprovalDecision::Command(
                 CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
@@ -947,6 +973,9 @@ fn exec_options(
             _ => None,
         };
         expanded.push(option);
+        if let Some(amendment) = project_amendment {
+            expanded.push(project_exec_option(amendment));
+        }
         if let Some(execpolicy_amendment) = broader {
             let command = strip_bash_lc_and_escape(&execpolicy_amendment.command);
             expanded.push(ApprovalOption {
@@ -964,6 +993,61 @@ fn exec_options(
         }
     }
     expanded
+}
+
+fn project_exec_option(
+    execpolicy_amendment: codex_app_server_protocol::ExecPolicyAmendment,
+) -> ApprovalOption {
+    let command = strip_bash_lc_and_escape(&execpolicy_amendment.command);
+    ApprovalOption {
+        label: format!(
+            "Yes, and don't ask again for commands that start with `{command} *` (this project only)"
+        ),
+        decision: ApprovalDecision::Command(
+            CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment {
+                execpolicy_amendment,
+            },
+        ),
+        shortcuts: vec![key_hint::plain(KeyCode::Char('l'))],
+    }
+}
+
+/// A project-scoped executable prefix may include interpreters, but never unwraps a shell command.
+fn project_execpolicy_amendment(
+    amendment: &codex_app_server_protocol::ExecPolicyAmendment,
+) -> Option<codex_app_server_protocol::ExecPolicyAmendment> {
+    let executable = amendment.command.first()?;
+    if amendment.command.len() <= 1
+        || executable.is_empty()
+        || executable.chars().any(char::is_whitespace)
+    {
+        return None;
+    }
+    let name = executable.rsplit(['/', '\\']).next()?;
+    if matches!(
+        name,
+        "sh" | "bash"
+            | "zsh"
+            | "fish"
+            | "dash"
+            | "ksh"
+            | "nu"
+            | "cmd"
+            | "cmd.exe"
+            | "powershell"
+            | "powershell.exe"
+            | "pwsh"
+            | "pwsh.exe"
+            | "env"
+            | "sudo"
+            | "doas"
+            | "xargs"
+    ) {
+        return None;
+    }
+    Some(codex_app_server_protocol::ExecPolicyAmendment {
+        command: vec![executable.clone()],
+    })
 }
 
 /// Broaden plain executable prefixes, excluding shell and interpreter wrappers.
@@ -1781,6 +1865,77 @@ mod tests {
     }
 
     #[test]
+    fn project_python_prefix_shortcut_emits_project_scoped_decision() {
+        let (tx, mut rx) = unbounded_channel::<AppEvent>();
+        let prefix = ExecPolicyAmendment {
+            command: vec![
+                ".venv/bin/python".into(),
+                "-u".into(),
+                "scripts/draft_qa_68_article.py".into(),
+            ],
+        };
+        let mut view = make_overlay(
+            ApprovalRequest::Exec(ExecApprovalRequest {
+                kind: Default::default(),
+                thread_id: ThreadId::new(),
+                thread_label: None,
+                id: "test".into(),
+                environment_id: Some("local".into()),
+                command: prefix.command.clone(),
+                reason: None,
+                available_decisions: vec![
+                    CommandExecutionApprovalDecision::Accept,
+                    CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                        execpolicy_amendment: prefix.clone(),
+                    },
+                    CommandExecutionApprovalDecision::Cancel,
+                ],
+                network_approval_context: None,
+                additional_permissions: None,
+            }),
+            AppEventSender::new(tx),
+            Features::with_defaults(),
+        );
+        let options = exec_options(
+            &[
+                CommandExecutionApprovalDecision::Accept,
+                CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment {
+                    execpolicy_amendment: prefix,
+                },
+                CommandExecutionApprovalDecision::Cancel,
+            ],
+            None,
+            None,
+            &crate::keymap::RuntimeKeymap::defaults().approval,
+            true,
+        );
+        assert_eq!(options.len(), 4);
+        assert!(
+            options[2]
+                .label
+                .contains("`.venv/bin/python *` (this project only)")
+        );
+        view.handle_key_event(KeyEvent::new(KeyCode::Char('l'), KeyModifiers::NONE));
+        let decision = std::iter::from_fn(|| rx.try_recv().ok())
+            .find_map(|event| match event {
+                AppEvent::SubmitThreadOp {
+                    op: Op::ExecApproval { decision, .. },
+                    ..
+                } => Some(decision),
+                _ => None,
+            })
+            .expect("project approval op");
+        assert_eq!(
+            decision,
+            CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment {
+                execpolicy_amendment: ExecPolicyAmendment {
+                    command: vec![".venv/bin/python".into()]
+                },
+            }
+        );
+    }
+
+    #[test]
     fn broader_prefix_option_keeps_suggested_rule_and_emits_executable_rule() {
         let decisions = vec![
             CommandExecutionApprovalDecision::Accept,
@@ -1796,13 +1951,15 @@ mod tests {
             None,
             None,
             &crate::keymap::RuntimeKeymap::defaults().approval,
+            true,
         );
-        assert_eq!(options.len(), 4);
+        assert_eq!(options.len(), 5);
         assert!(options[1].label.contains("lsof -nP +L1"));
-        assert!(options[2].label.contains("`lsof` command (any arguments)"));
-        assert!(options[2].shortcuts.is_empty());
+        assert!(options[2].label.contains("`lsof *` (this project only)"));
+        assert!(options[3].label.contains("`lsof` command (any arguments)"));
+        assert!(options[3].shortcuts.is_empty());
         assert_eq!(
-            command_decision_to_review_decision(match &options[2].decision {
+            command_decision_to_review_decision(match &options[3].decision {
                 ApprovalDecision::Command(decision) => decision,
                 _ => panic!("expected command decision"),
             }),
@@ -2004,6 +2161,7 @@ mod tests {
             Some(&network_context),
             /*additional_permissions*/ None,
             &keymap.approval,
+            true,
         );
 
         let labels: Vec<String> = options.into_iter().map(|option| option.label).collect();
@@ -2030,6 +2188,7 @@ mod tests {
             /*network_approval_context*/ None,
             /*additional_permissions*/ None,
             &keymap.approval,
+            true,
         );
 
         let labels: Vec<String> = options.into_iter().map(|option| option.label).collect();
@@ -2064,6 +2223,7 @@ mod tests {
             /*network_approval_context*/ None,
             Some(&additional_permissions),
             &keymap.approval,
+            true,
         );
 
         let labels: Vec<String> = options.into_iter().map(|option| option.label).collect();

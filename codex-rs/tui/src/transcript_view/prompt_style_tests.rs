@@ -15,6 +15,29 @@ use ratatui::text::Line;
 use ratatui::widgets::Widget;
 
 #[test]
+fn unicode_prompt_gutters_survive_layout_and_resize_without_entering_copied_text() {
+    let message = "Привет 世界 https://example.test/a long wrapped message\nещё одна строка";
+    let cell = new_user_prompt(message.into(), Vec::new(), Vec::new(), Vec::new());
+    for initial_width in [12, 24, 60] {
+        let mut layout = TextLayout::new(
+            cell.transcript_hyperlink_lines(initial_width),
+            initial_width,
+        );
+        for width in [12, 60, 24] {
+            layout = layout.rewrap(width);
+            assert_eq!(layout.text(), format!("\n{message}\n"));
+            let area = Rect::new(
+                0,
+                0,
+                width,
+                layout.row_count().try_into().expect("short prompt"),
+            );
+            layout.render(area, &mut Buffer::empty(area), 0);
+        }
+    }
+}
+
+#[test]
 fn visible_rows_fill_inherited_styles_without_painting_outside_the_viewport() {
     let style = Style::default().green().on_dark_gray().italic();
     let layout = TextLayout::new(

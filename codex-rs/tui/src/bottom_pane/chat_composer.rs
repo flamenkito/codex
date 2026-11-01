@@ -382,7 +382,6 @@ use crate::render::Insets;
 use crate::render::RectExt;
 use crate::render::renderable::Renderable;
 use crate::slash_command::SlashCommand;
-use crate::style::user_message_style;
 use crate::ui_consts::FOOTER_INDENT_COLS;
 use codex_protocol::ThreadId;
 use codex_protocol::user_input::ByteRange;
@@ -463,6 +462,9 @@ use ratatui::style::Color;
 /// If the pasted content exceeds this number of characters, replace it with a
 /// placeholder in the UI.
 const LARGE_PASTE_CHAR_THRESHOLD: usize = 1000;
+
+// Input and model metadata share the same inset from the composer's gutter.
+const COMPOSER_HORIZONTAL_PADDING: u16 = 3;
 
 fn user_input_too_large_message(actual_chars: usize) -> String {
     format!(
@@ -4885,8 +4887,28 @@ impl ChatComposer {
             selection.register(status.intersection(buf.area), changed);
             selection.register(footer_rect.intersection(buf.area), changed);
         }
-        let style = user_message_style();
+        let style = crate::style::user_message_style();
         Block::default().style(style).render(composer_rect, buf);
+        for y in composer_rect.y..composer_rect.bottom() {
+            buf[(composer_rect.x, y)]
+                .set_symbol("▎")
+                .set_fg(Color::Cyan);
+        }
+        if composer_rect.height >= 4
+            && let Some(line) = self.footer.status_line_value.clone()
+        {
+            line.render(
+                Rect::new(
+                    composer_rect.x + COMPOSER_HORIZONTAL_PADDING,
+                    composer_rect.bottom() - 2,
+                    composer_rect
+                        .width
+                        .saturating_sub(2 * COMPOSER_HORIZONTAL_PADDING),
+                    1,
+                ),
+                buf,
+            );
+        }
         if !remote_images_rect.is_empty() {
             let first = self
                 .attachments
@@ -4904,7 +4926,7 @@ impl ChatComposer {
             .render(remote_images_rect, buf);
         }
         if !textarea_rect.is_empty() {
-            let prompt = if self.draft.input_enabled {
+            let _prompt = if self.draft.input_enabled {
                 if self.draft.is_bash_mode {
                     Span::from("!").light_red().bold()
                 } else if self.luna_reserve_active {
@@ -4928,7 +4950,7 @@ impl ChatComposer {
             buf.set_span(
                 textarea_rect.x - LIVE_PREFIX_COLS,
                 textarea_rect.y,
-                &prompt,
+                &" ".into(),
                 textarea_rect.width,
             );
         }

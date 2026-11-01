@@ -4378,6 +4378,11 @@ pub enum ReviewDecision {
         proposed_execpolicy_amendment: ExecPolicyAmendment,
     },
 
+    /// User approved a command prefix only for the current project's rules.
+    ApprovedProjectExecpolicyAmendment {
+        proposed_execpolicy_amendment: ExecPolicyAmendment,
+    },
+
     /// User has approved this request and wants future prompts in the same
     /// session-scoped approval cache to be automatically approved for the
     /// remainder of the session.
@@ -4426,6 +4431,9 @@ impl ReviewDecision {
         match self {
             ReviewDecision::Approved => "approved",
             ReviewDecision::ApprovedExecpolicyAmendment { .. } => "approved_with_amendment",
+            ReviewDecision::ApprovedProjectExecpolicyAmendment { .. } => {
+                "approved_with_project_amendment"
+            }
             ReviewDecision::ApprovedForSession => "approved_for_session",
             ReviewDecision::ApprovedMcpPolicyAmendment => "approved_mcp_policy_amendment",
             ReviewDecision::NetworkPolicyAmendment {

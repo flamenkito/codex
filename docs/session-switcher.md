@@ -1,6 +1,10 @@
 # Local session-switcher extension
 
 The custom CLI opens a compact **Sessions** panel with **Ctrl+X, then L**.
+**Ctrl+X, then N** starts a new session, including while the current turn is
+running. The previous task keeps running in the backend; use **Ctrl+X, then L**
+to return to it. Customize or disable this shortcut with
+`tui.keymap.global.new_session` (default: `leader n`).
 The implementation is a native Rust module, not a marketplace plugin: current
 Codex plugins cannot register terminal widgets, key actions, or thread-switch
 handlers. The module lives in `tui/src/resume_picker/switcher.rs`, with small

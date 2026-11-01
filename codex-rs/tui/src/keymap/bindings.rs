@@ -287,6 +287,7 @@ define_runtime_action_bindings! {
         open_agents,
         open_sessions,
         open_models,
+        new_session,
         open_transcript,
         find_transcript,
         select_transcript,

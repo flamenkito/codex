@@ -872,6 +872,9 @@ impl QuickDial {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct Tui {
+    /// Show the workspace status sidebar when the terminal is wide enough.
+    #[serde(default = "default_true")]
+    pub sidebar: bool,
     #[serde(default, flatten)]
     pub notification_settings: TuiNotificationSettings,
 

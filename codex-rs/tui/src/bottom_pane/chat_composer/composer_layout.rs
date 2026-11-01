@@ -77,7 +77,7 @@ impl ChatComposer {
         let (composer_rect, popup_rect, mut footer_rect) = if shortcuts_above {
             let [shortcuts, composer, footer] = Layout::vertical([
                 Constraint::Max(footer_height(&self.hint_footer_props(options), area.width)),
-                Constraint::Min(3 + voice_rows),
+                Constraint::Min(5 + voice_rows),
                 Constraint::Length(footer_hint_height),
             ])
             .areas(area);
@@ -85,7 +85,7 @@ impl ChatComposer {
         } else if self.popups.active.is_above_composer() {
             // Preserve the draft first, then its footer, and use remaining space for suggestions.
             let [mut composer, mut popup, footer] = Layout::vertical([
-                Constraint::Min(3 + voice_rows),
+                Constraint::Min(5 + voice_rows),
                 Constraint::Max(popup_height.saturating_sub(footer_hint_height)),
                 Constraint::Length(footer_hint_height),
             ])
@@ -95,7 +95,7 @@ impl ChatComposer {
             (composer, popup, footer)
         } else {
             let [composer, popup] = Layout::vertical([
-                Constraint::Min(3 + voice_rows),
+                Constraint::Min(5 + voice_rows),
                 Constraint::Max(popup_height),
             ])
             .areas(area);
@@ -106,9 +106,10 @@ impl ChatComposer {
         let voice_rows = voice_rows * u16::from(composer_rect.height >= voice_rows + 3);
         let mut textarea_rect = composer_rect.inset(Insets::tlbr(
             /*top*/ 1 + voice_rows,
-            LIVE_PREFIX_COLS,
-            /*bottom*/ 1,
-            /*right*/ 1u16.saturating_add(options.textarea_right_reserve),
+            COMPOSER_HORIZONTAL_PADDING,
+            /*bottom*/ 3,
+            /*right*/
+            COMPOSER_HORIZONTAL_PADDING.saturating_add(options.textarea_right_reserve),
         ));
         let remote_images_height = self
             .attachments
@@ -173,7 +174,7 @@ impl ChatComposer {
         options: ComposerRenderOptions<'_>,
     ) -> u16 {
         let footer_hint_height = self.footer_hint_height(width, options);
-        const COLS_WITH_MARGIN: u16 = LIVE_PREFIX_COLS + 1;
+        const COLS_WITH_MARGIN: u16 = 2 * COMPOSER_HORIZONTAL_PADDING;
         let inner_width =
             width.saturating_sub(COLS_WITH_MARGIN.saturating_add(options.textarea_right_reserve));
         let remote_images_height: u16 = self
@@ -192,7 +193,7 @@ impl ChatComposer {
             } else {
                 0
             }
-            + 2
+            + 4
             + self
                 .voice_strip
                 .as_ref()

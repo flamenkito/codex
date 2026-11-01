@@ -6,6 +6,38 @@ use codex_app_server_protocol::ThreadUsageBreakdownGroup;
 use codex_utils_path_uri::PathUri;
 
 #[tokio::test]
+async fn sidebar_marks_busy_model_selection_for_next_turn() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
+    chat.turn_lifecycle.start(std::time::Instant::now());
+    chat.sidebar_turn_model = Some("previous-model".into());
+    let text = lines_to_single_string(&chat.sidebar_lines());
+    assert!(text.contains("Working: previous-model"));
+    assert!(text.contains("Selection applies next turn"));
+    chat.turn_lifecycle.finish();
+    assert!(!lines_to_single_string(&chat.sidebar_lines()).contains("Selection applies next turn"));
+}
+
+#[tokio::test]
+async fn sidebar_shows_current_context_instead_of_session_total() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(None).await;
+    chat.token_info = Some(TokenUsageInfo {
+        total_token_usage: TokenUsage {
+            total_tokens: 999999,
+            ..Default::default()
+        },
+        last_token_usage: TokenUsage {
+            total_tokens: 42000,
+            ..Default::default()
+        },
+        model_context_window: Some(200000),
+    });
+    let text = lines_to_single_string(&chat.sidebar_lines());
+    assert!(text.contains("42,000 tokens"));
+    assert!(!text.lines().any(|line| line == "Model"));
+    assert!(!text.contains("999999"));
+}
+
+#[tokio::test]
 async fn status_command_renders_immediately_and_refreshes_rate_limits_for_chatgpt_auth() {
     let (mut chat, mut rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
     set_chatgpt_auth(&mut chat);

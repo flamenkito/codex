@@ -1725,6 +1725,51 @@ async fn append_execpolicy_amendment_updates_policy_and_file() {
 }
 
 #[tokio::test]
+async fn project_execpolicy_amendment_reloads_only_for_its_project() -> anyhow::Result<()> {
+    let workspace = tempdir()?;
+    let project = workspace.path().join("project");
+    let nested = project.join("nested");
+    let other = workspace.path().join("other");
+    fs::create_dir_all(&nested)?;
+    fs::create_dir_all(&other)?;
+    fs::write(project.join(".git"), "gitdir: test")?;
+    let stack = config_stack_for_dot_codex_folder(&project.join(".codex"));
+    let folder = project_policy_folder(&stack, &nested).await?;
+    assert_eq!(folder, project.join(".codex"));
+    fs::create_dir_all(&folder)?;
+    let amendment = ExecPolicyAmendment::new(vec![".venv/bin/python".into()]);
+    let manager = ExecPolicyManager::default();
+    manager
+        .append_amendment_and_update(&folder, &amendment)
+        .await?;
+    let command = vec![".venv/bin/python".into(), "another_script.py".into()];
+    assert_eq!(
+        manager
+            .current()
+            .check(&command, &|_| Decision::Prompt)
+            .decision,
+        Decision::Allow
+    );
+    let reloaded = load_exec_policy(&stack).await?;
+    assert_eq!(
+        reloaded.check(&command, &|_| Decision::Prompt).decision,
+        Decision::Allow
+    );
+    let other_policy =
+        load_exec_policy(&config_stack_for_dot_codex_folder(&other.join(".codex"))).await?;
+    assert_eq!(
+        other_policy.check(&command, &|_| Decision::Prompt).decision,
+        Decision::Prompt
+    );
+    assert!(!other.join(".codex/rules/default.rules").exists());
+    assert_eq!(
+        fs::read_to_string(folder.join("rules/default.rules"))?,
+        "prefix_rule(pattern=[\".venv/bin/python\"], decision=\"allow\")\n"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn append_execpolicy_amendment_rejects_empty_prefix() {
     let codex_home = tempdir().expect("create temp dir");
     let manager = ExecPolicyManager::default();

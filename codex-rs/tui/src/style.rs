@@ -66,13 +66,11 @@ pub fn user_message_style() -> Style {
 /// Some terminals do not answer the optional default-color probe. Keep submitted prompts shaded
 /// with an ANSI-safe fallback instead of dropping the surface.
 pub(crate) fn history_prompt_style() -> Style {
-    let Some(background) = default_bg() else {
-        return Style::default().bg(Color::DarkGray);
-    };
+    let background = default_bg().unwrap_or((13, 17, 23));
     let (foreground, alpha) = if is_light(background) {
         ((0, 0, 0), 0.02)
     } else {
-        ((255, 255, 255), 0.16)
+        ((0, 0, 0), 0.65)
     };
     Style::default().bg(best_color(blend(foreground, background, alpha)))
 }
@@ -210,10 +208,13 @@ pub(crate) fn footer_hint_label_style() -> Style {
 
 /// Returns the style for a user-authored message using the provided terminal background.
 pub fn user_message_style_for(terminal_bg: Option<(u8, u8, u8)>) -> Style {
-    match terminal_bg {
-        Some(bg) => Style::default().bg(user_message_bg(bg)),
-        None => Style::default(),
-    }
+    let background = terminal_bg.unwrap_or((13, 17, 23));
+    let fill = if is_light(background) {
+        blend((0, 0, 0), background, 0.04)
+    } else {
+        blend((255, 255, 255), background, 0.025)
+    };
+    Style::default().bg(best_color(fill))
 }
 
 pub fn proposed_plan_style_for(terminal_bg: Option<(u8, u8, u8)>) -> Style {

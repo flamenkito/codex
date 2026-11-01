@@ -223,6 +223,7 @@ impl ChatWidget {
         }
 
         let mcp_startup_owned_status = self.status_header_is_mcp_startup_owned();
+        self.sidebar_mcp_status = self.mcp_startup_status.clone().unwrap_or_default();
         self.mcp_startup_status = None;
         self.mcp_startup_ignore_updates_until_next_start = true;
         self.mcp_startup_allow_terminal_only_next_round = false;

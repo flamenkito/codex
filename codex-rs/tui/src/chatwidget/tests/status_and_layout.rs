@@ -3980,6 +3980,7 @@ async fn account_update_discards_stale_workspace_headline_results() {
 #[tokio::test]
 async fn status_line_branch_state_resets_when_git_branch_disabled() {
     let (mut chat, _rx, _op_rx) = make_chatwidget_manual(/*model_override*/ None).await;
+    chat.local_settings.tui.sidebar = false;
     chat.status_line_branch = Some("main".to_string());
     chat.status_line_branch_pending = true;
     chat.status_line_branch_lookup_complete = true;
@@ -4413,6 +4414,37 @@ async fn status_line_model_with_reasoning_context_remaining_footer_snapshot() {
     assert_chatwidget_snapshot!(
         "status_line_model_with_reasoning_context_remaining_footer",
         normalized_backend_snapshot(terminal.backend())
+    );
+}
+
+#[tokio::test]
+async fn sidebar_shows_current_goal_status_and_budget() {
+    let (mut chat, _rx, _op_rx) = make_chatwidget_manual(Some("gpt-5.5")).await;
+    chat.set_feature_enabled(Feature::Goals, true);
+    chat.set_sidebar_visible(true);
+    chat.on_thread_goal_updated(
+        test_thread_goal(AppThreadGoalStatus::Active, Some(50_000), 40_000),
+        None,
+    );
+    assert!(
+        chat.sidebar_lines()
+            .iter()
+            .any(|line| line.to_string() == "Pursuing goal (40K / 50K)")
+    );
+    chat.on_thread_goal_updated(
+        test_thread_goal(AppThreadGoalStatus::Complete, Some(50_000), 40_000),
+        None,
+    );
+    assert!(
+        chat.sidebar_lines()
+            .iter()
+            .any(|line| line.to_string().starts_with("Goal achieved"))
+    );
+    assert!(
+        !chat
+            .sidebar_lines()
+            .iter()
+            .any(|line| line.to_string().starts_with("Pursuing goal"))
     );
 }
 

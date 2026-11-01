@@ -886,6 +886,7 @@ impl NetworkApprovalService {
             &approval_decision,
             ReviewDecision::Approved
                 | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+                | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
                 | ReviewDecision::ApprovedForSession
                 | ReviewDecision::NetworkPolicyAmendment { .. }
         ) {
@@ -896,7 +897,9 @@ impl NetworkApprovalService {
         let mut telemetry_decision = approval_decision.clone();
         let mut network_policy_amendment_applied = false;
         let resolved = match approval_decision {
-            ReviewDecision::Approved | ReviewDecision::ApprovedExecpolicyAmendment { .. } => {
+            ReviewDecision::Approved
+            | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+            | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. } => {
                 if self.session_denied_hosts.lock().await.contains(&key) {
                     if let Some(owner_call) = owner_call.as_ref() {
                         self.record_call_outcome(

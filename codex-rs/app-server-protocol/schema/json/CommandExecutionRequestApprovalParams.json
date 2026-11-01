@@ -233,6 +233,31 @@
         },
         {
           "additionalProperties": false,
+          "description": "User approved a prefix to persist in the current project's `.codex/rules` only.",
+          "properties": {
+            "acceptWithProjectExecpolicyAmendment": {
+              "properties": {
+                "execpolicy_amendment": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "execpolicy_amendment"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "acceptWithProjectExecpolicyAmendment"
+          ],
+          "title": "AcceptWithProjectExecpolicyAmendmentCommandExecutionApprovalDecision",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "User chose a persistent network policy rule (allow/deny) for this host.",
           "properties": {
             "applyNetworkPolicyAmendment": {

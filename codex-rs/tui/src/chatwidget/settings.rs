@@ -671,7 +671,7 @@ impl ChatWidget {
         }
     }
 
-    fn goal_status_indicator(&self, now: Instant) -> Option<GoalStatusIndicator> {
+    pub(super) fn goal_status_indicator(&self, now: Instant) -> Option<GoalStatusIndicator> {
         if !self.config.features.enabled(Feature::Goals) {
             return None;
         }

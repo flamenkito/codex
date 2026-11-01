@@ -2802,6 +2802,31 @@
         },
         {
           "additionalProperties": false,
+          "description": "User approved a prefix to persist in the current project's `.codex/rules` only.",
+          "properties": {
+            "acceptWithProjectExecpolicyAmendment": {
+              "properties": {
+                "execpolicy_amendment": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "execpolicy_amendment"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "acceptWithProjectExecpolicyAmendment"
+          ],
+          "title": "AcceptWithProjectExecpolicyAmendmentCommandExecutionApprovalDecision",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
           "description": "User chose a persistent network policy rule (allow/deny) for this host.",
           "properties": {
             "applyNetworkPolicyAmendment": {
@@ -4581,6 +4606,31 @@
             "approved_execpolicy_amendment"
           ],
           "title": "ApprovedExecpolicyAmendmentReviewDecision",
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "User approved a command prefix only for the current project's rules.",
+          "properties": {
+            "approved_project_execpolicy_amendment": {
+              "properties": {
+                "proposed_execpolicy_amendment": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "proposed_execpolicy_amendment"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "approved_project_execpolicy_amendment"
+          ],
+          "title": "ApprovedProjectExecpolicyAmendmentReviewDecision",
           "type": "object"
         },
         {

@@ -95,6 +95,7 @@ pub(crate) async fn review(invocation: &ToolInvocation) -> Result<(), FunctionCa
         )),
         Some(
             ReviewDecision::ApprovedExecpolicyAmendment { .. }
+            | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
             | ReviewDecision::ApprovedMcpPolicyAmendment
             | ReviewDecision::NetworkPolicyAmendment { .. },
         ) => Err(FunctionCallError::RespondToModel(

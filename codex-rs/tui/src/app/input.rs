@@ -769,6 +769,11 @@ impl App {
             return true;
         }
 
+        if self.keymap.app.new_session.is_pressed(key_event) {
+            self.app_event_tx.send(AppEvent::NewSession { name: None });
+            return true;
+        }
+
         if self.keymap.app.open_models.is_pressed(key_event) {
             self.chat_widget.open_model_switcher();
             return true;

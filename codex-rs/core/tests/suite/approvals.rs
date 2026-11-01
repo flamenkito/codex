@@ -2401,9 +2401,13 @@ async fn approving_execpolicy_amendment_emits_one_saved_prefix_notice(
     Ok(())
 }
 
+#[test_case::test_case(false; "global")]
+#[test_case::test_case(true; "project")]
 #[tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
-async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts() -> Result<()> {
+async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts(
+    project_local: bool,
+) -> Result<()> {
     let server = start_mock_server().await;
     let approval_policy = AskForApproval::UnlessTrusted;
     let sandbox_policy = SandboxPolicy::new_workspace_write_policy();
@@ -2470,12 +2474,30 @@ async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
-            decision: ReviewDecision::ApprovedExecpolicyAmendment {
-                proposed_execpolicy_amendment: expected_execpolicy_amendment.clone(),
+            decision: if project_local {
+                ReviewDecision::ApprovedProjectExecpolicyAmendment {
+                    proposed_execpolicy_amendment: expected_execpolicy_amendment.clone(),
+                }
+            } else {
+                ReviewDecision::ApprovedExecpolicyAmendment {
+                    proposed_execpolicy_amendment: expected_execpolicy_amendment.clone(),
+                }
             },
         })
         .await?;
-    wait_for_completion(&test).await;
+    wait_for_event(&test.codex, |event| {
+        if let EventMsg::Warning(warning) = event {
+            assert!(
+                !warning
+                    .message
+                    .contains("Failed to apply execpolicy amendment"),
+                "{}",
+                warning.message
+            );
+        }
+        matches!(event, EventMsg::TurnComplete(_))
+    })
+    .await;
 
     let developer_messages = first_results
         .single_request()
@@ -2487,13 +2509,21 @@ async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts
         "expected developer message documenting saved rule, got: {developer_messages:?}"
     );
 
-    let policy_path = test.home.path().join("rules").join("default.rules");
+    let policy_folder = if project_local {
+        test.cwd.path().join(".codex")
+    } else {
+        test.home.path().to_path_buf()
+    };
+    let policy_path = policy_folder.join("rules").join("default.rules");
     let policy_contents = fs::read_to_string(&policy_path)?;
     assert!(
         policy_contents
             .contains(r#"prefix_rule(pattern=["touch", "allow-prefix.txt"], decision="allow")"#),
         "unexpected policy contents: {policy_contents}"
     );
+    if project_local {
+        assert!(!test.home.path().join("rules/default.rules").exists());
+    }
 
     let first_output = parse_result(
         &first_results

@@ -3078,12 +3078,22 @@ fn render_list(frame: &mut crate::custom_terminal::Frame, area: Rect, state: &Pi
     let rows = &state.filtered_rows;
     if rows.is_empty() {
         let message = render_empty_state_line(state);
-        frame.render_widget_ref(&message, area);
+        let inset = if state.switcher.is_some() { 3 } else { 0 };
+        frame.render_widget_ref(
+            &message,
+            Rect::new(
+                area.x + inset,
+                area.y,
+                area.width.saturating_sub(inset),
+                area.height,
+            ),
+        );
         return;
     }
 
     let show_more_above = state.has_more_above();
     let show_more_below = state.has_more_below(area.height as usize);
+    let indicator_inset = if state.switcher.is_some() { 3 } else { 0 };
     let content_area = Rect::new(
         area.x,
         area.y.saturating_add(u16::from(show_more_above)),
@@ -3095,7 +3105,12 @@ fn render_list(frame: &mut crate::custom_terminal::Frame, area: Rect, state: &Pi
     if show_more_above {
         frame.render_widget_ref(
             &more_line("↑ more"),
-            Rect::new(area.x, area.y, area.width, 1),
+            Rect::new(
+                area.x + indicator_inset,
+                area.y,
+                area.width.saturating_sub(indicator_inset),
+                1,
+            ),
         );
     }
 
@@ -3146,9 +3161,9 @@ fn render_list(frame: &mut crate::custom_terminal::Frame, area: Rect, state: &Pi
         frame.render_widget_ref(
             &more_line(label),
             Rect::new(
-                area.x,
+                area.x + indicator_inset,
                 area.y.saturating_add(area.height.saturating_sub(1)),
-                area.width,
+                area.width.saturating_sub(indicator_inset),
                 1,
             ),
         );

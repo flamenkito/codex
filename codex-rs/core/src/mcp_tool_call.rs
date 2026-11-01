@@ -304,6 +304,7 @@ pub(crate) async fn handle_mcp_tool_call(
             | ReviewDecision::ApprovedForSession
             | ReviewDecision::ApprovedMcpPolicyAmendment
             | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+            | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
             | ReviewDecision::NetworkPolicyAmendment { .. }) => {
                 return handle_approved_mcp_tool_call(
                     &sess,
@@ -2374,6 +2375,7 @@ async fn apply_mcp_tool_approval_decision(
         }
         ReviewDecision::Approved
         | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+        | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
         | ReviewDecision::NetworkPolicyAmendment { .. }
         | ReviewDecision::Denied { .. }
         | ReviewDecision::TimedOut
