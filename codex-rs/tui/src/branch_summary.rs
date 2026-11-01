@@ -93,10 +93,33 @@ struct GhRepoParent {
     name_with_owner: String,
 }
 
-/// Returns the checked-out branch name for one status-line working directory.
-///
-/// Detached HEADs, non-git directories, and command failures return `None` so the renderer can
-/// omit the branch item without surfacing a background lookup error.
+/// Count porcelain records, consuming the second path of rename/copy records.
+pub(crate) async fn dirty_file_count(
+    runner: &dyn WorkspaceCommandExecutor,
+    cwd: &Path,
+) -> Option<usize> {
+    let output = run_git_command(runner, cwd, &["status", "--porcelain=v1", "-z"])
+        .await
+        .ok()?;
+    if !output.success() {
+        return None;
+    }
+    let text = output.stdout;
+    let mut entries = text.split('\0').filter(|entry| !entry.is_empty());
+    let mut count = 0;
+    while let Some(entry) = entries.next() {
+        count += 1;
+        if entry.starts_with('R')
+            || entry.starts_with('C')
+            || entry.chars().nth(1).is_some_and(|c| c == 'R' || c == 'C')
+        {
+            entries.next();
+        }
+    }
+    Some(count)
+}
+
+/// Returns the checked-out branch, omitting detached HEADs and unavailable repositories.
 pub(crate) async fn current_branch_name(
     runner: &dyn WorkspaceCommandExecutor,
     cwd: &Path,
@@ -666,6 +689,16 @@ mod tests {
             ),
             Some(vec!["openai/codex".to_string(), "fcoury/codex".to_string()])
         );
+    }
+
+    #[tokio::test]
+    async fn sidebar_dirty_count_counts_rename_once_and_handles_newlines() {
+        let runner = FakeRunner::new(vec![response(
+            &["git", "status", "--porcelain=v1", "-z"],
+            0,
+            " M edited\0R  new-name\0old-name\0?? line\nbreak\0",
+        )]);
+        assert_eq!(dirty_file_count(&runner, Path::new("/repo")).await, Some(3));
     }
 
     fn response(argv: &[&str], exit_code: i32, stdout: &str) -> FakeResponse {

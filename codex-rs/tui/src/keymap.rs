@@ -106,6 +106,7 @@ pub(crate) struct AppKeymap {
     pub(crate) open_agents: Vec<KeyBinding>,
     pub(crate) open_sessions: Vec<KeyBinding>,
     pub(crate) open_models: Vec<KeyBinding>,
+    pub(crate) new_session: Vec<KeyBinding>,
     /// Open transcript overlay.
     pub(crate) open_transcript: Vec<KeyBinding>,
     /// Find text in the full transcript.
@@ -734,6 +735,11 @@ impl RuntimeKeymap {
                 keymap.global.open_models.as_ref(),
                 &defaults.app.open_models,
                 "tui.keymap.global.open_models",
+            )?,
+            new_session: resolve_bindings(
+                keymap.global.new_session.as_ref(),
+                &defaults.app.new_session,
+                "tui.keymap.global.new_session",
             )?,
             open_agents: resolve_bindings(
                 keymap.global.open_agents.as_ref(),
@@ -1489,6 +1495,10 @@ impl RuntimeKeymap {
                 app.open_models.as_slice(),
             ),
             (
+                keymap.global.new_session.as_ref(),
+                app.new_session.as_slice(),
+            ),
+            (
                 keymap.global.open_transcript.as_ref(),
                 app.open_transcript.as_slice(),
             ),
@@ -1720,6 +1730,7 @@ impl RuntimeKeymap {
                 open_agents: default_bindings![],
                 open_sessions: default_bindings![],
                 open_models: default_bindings![],
+                new_session: default_bindings![],
                 open_transcript: default_bindings![ctrl(KeyCode::Char('t'))],
                 find_transcript: default_bindings![plain(KeyCode::F(3))],
                 select_transcript: default_bindings![],
@@ -2070,6 +2081,7 @@ impl RuntimeKeymap {
             ("global.open_agents", &self.app.open_agents),
             ("global.open_sessions", &self.app.open_sessions),
             ("global.open_models", &self.app.open_models),
+            ("global.new_session", &self.app.new_session),
             ("chat.open_presets", &self.chat.open_presets),
             ("chat.toggle_voice", &self.chat.toggle_voice),
         ] {
@@ -2101,6 +2113,7 @@ impl RuntimeKeymap {
             ("open_agents", self.app.open_agents.as_slice()),
             ("open_sessions", self.app.open_sessions.as_slice()),
             ("open_models", self.app.open_models.as_slice()),
+            ("new_session", self.app.new_session.as_slice()),
             ("open_transcript", self.app.open_transcript.as_slice()),
             ("find_transcript", self.app.find_transcript.as_slice()),
             ("select_transcript", self.app.select_transcript.as_slice()),
@@ -2211,6 +2224,7 @@ impl RuntimeKeymap {
                 ("open_agents", self.app.open_agents.as_slice()),
                 ("open_sessions", self.app.open_sessions.as_slice()),
                 ("open_models", self.app.open_models.as_slice()),
+                ("new_session", self.app.new_session.as_slice()),
                 ("open_transcript", self.app.open_transcript.as_slice()),
                 ("find_transcript", self.app.find_transcript.as_slice()),
                 ("select_transcript", self.app.select_transcript.as_slice()),
@@ -2273,6 +2287,7 @@ impl RuntimeKeymap {
                 ("open_agents", self.app.open_agents.as_slice()),
                 ("open_sessions", self.app.open_sessions.as_slice()),
                 ("open_models", self.app.open_models.as_slice()),
+                ("new_session", self.app.new_session.as_slice()),
                 ("open_transcript", self.app.open_transcript.as_slice()),
                 ("find_transcript", self.app.find_transcript.as_slice()),
                 ("select_transcript", self.app.select_transcript.as_slice()),

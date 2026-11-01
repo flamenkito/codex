@@ -113,6 +113,7 @@ define_keymap_actions! {
     global "Global" {
         open_sessions => "Open the searchable session switcher.",
         open_models => "Open the searchable model switcher.",
+        new_session => "Start a new session without stopping the previous task.",
         open_agents => "Open the shared agent-session overview.",
         open_transcript => "Open the transcript overlay.",
         find_transcript => "Find text in the full transcript.",

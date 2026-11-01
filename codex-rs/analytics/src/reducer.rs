@@ -3522,7 +3522,8 @@ fn command_execution_review_result(
         CommandExecutionApprovalDecision::AcceptForSession => {
             (ReviewStatus::Approved, ReviewResolution::SessionApproval)
         }
-        CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment { .. } => (
+        CommandExecutionApprovalDecision::AcceptWithExecpolicyAmendment { .. }
+        | CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment { .. } => (
             ReviewStatus::Approved,
             ReviewResolution::ExecPolicyAmendment,
         ),

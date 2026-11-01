@@ -2055,6 +2055,14 @@ async fn on_command_execution_request_approval_response(
                         },
                         None,
                     ),
+                    CommandExecutionApprovalDecision::AcceptWithProjectExecpolicyAmendment {
+                        execpolicy_amendment,
+                    } => (
+                        ReviewDecision::ApprovedProjectExecpolicyAmendment {
+                            proposed_execpolicy_amendment: execpolicy_amendment.into_core(),
+                        },
+                        None,
+                    ),
                     CommandExecutionApprovalDecision::ApplyNetworkPolicyAmendment {
                         network_policy_amendment,
                     } => {

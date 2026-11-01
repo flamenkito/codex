@@ -187,7 +187,7 @@ pub async fn exec_approval(
     turn_id: Option<String>,
     decision: ReviewDecision,
 ) {
-    let human_approval = {
+    let (human_approval, approval_turn) = {
         let active = sess.active_turn.lock().await;
         let Some(turn) = active.as_ref() else {
             return;
@@ -196,11 +196,17 @@ pub async fn exec_approval(
         let Some(pending) = state.pending_approval(&approval_id) else {
             return;
         };
-        if pending.kind == codex_protocol::approvals::ExecApprovalKind::HumanCommand {
-            state.remove_pending_approval(&approval_id)
-        } else {
-            None
-        }
+        let approval_turn = turn
+            .task
+            .as_ref()
+            .map(|task| Arc::clone(&task.turn_context));
+        let human_approval =
+            if pending.kind == codex_protocol::approvals::ExecApprovalKind::HumanCommand {
+                state.remove_pending_approval(&approval_id)
+            } else {
+                None
+            };
+        (human_approval, approval_turn)
     };
     if let Some(pending) = human_approval {
         let decision = pending.validate(decision);
@@ -216,13 +222,42 @@ pub async fn exec_approval(
         return;
     }
     let event_turn_id = turn_id.unwrap_or_else(|| approval_id.clone());
-    if let ReviewDecision::ApprovedExecpolicyAmendment {
-        proposed_execpolicy_amendment,
-    } = &decision
-        && let Err(err) = sess
+    let amendment_result = match &decision {
+        ReviewDecision::ApprovedExecpolicyAmendment {
+            proposed_execpolicy_amendment,
+        } => sess
             .persist_execpolicy_amendment(proposed_execpolicy_amendment)
             .await
-    {
+            .map_err(anyhow::Error::from),
+        ReviewDecision::ApprovedProjectExecpolicyAmendment {
+            proposed_execpolicy_amendment,
+        } => {
+            async {
+                let config = match approval_turn {
+                    Some(turn) => Arc::clone(&turn.config),
+                    None => sess.get_config().await,
+                };
+                let folder = crate::exec_policy::project_policy_folder(
+                    &config.config_layer_stack,
+                    config.cwd.as_path(),
+                )
+                .await?;
+                anyhow::ensure!(
+                    folder != config.codex_home.as_path(),
+                    "project rules directory must differ from CODEX_HOME"
+                );
+                tokio::fs::create_dir_all(&folder).await?;
+                sess.services
+                    .exec_policy
+                    .append_amendment_and_update(&folder, proposed_execpolicy_amendment)
+                    .await?;
+                Ok(())
+            }
+            .await
+        }
+        _ => Ok(()),
+    };
+    if let Err(err) = amendment_result {
         let message = format!("Failed to apply execpolicy amendment: {err}");
         tracing::warn!("{message}");
         let warning = EventMsg::Warning(WarningEvent { message });

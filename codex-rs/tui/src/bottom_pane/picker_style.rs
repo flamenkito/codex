@@ -34,7 +34,24 @@ pub(crate) fn switcher_surface_style() -> Style {
             (background.0 / 4, background.1 / 4, background.2 / 4)
         }
     });
-    Style::default().bg(crate::terminal_palette::rgb_color(background))
+    let foreground = if is_light(background) {
+        (31, 35, 40)
+    } else {
+        (201, 209, 217)
+    };
+    Style::default()
+        .fg(crate::terminal_palette::rgb_color(foreground))
+        .bg(crate::terminal_palette::rgb_color(background))
+}
+
+pub(crate) fn switcher_secondary_style() -> Style {
+    Style::default().fg(crate::terminal_palette::rgb_color((139, 148, 158)))
+}
+
+pub(crate) fn switcher_group_style() -> Style {
+    Style::default()
+        .fg(crate::terminal_palette::rgb_color((57, 197, 207)))
+        .bold()
 }
 
 pub(crate) fn switcher_selection_style() -> Style {

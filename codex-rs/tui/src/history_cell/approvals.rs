@@ -28,6 +28,9 @@ pub(crate) enum ReviewDecision {
     ApprovedExecpolicyAmendment {
         proposed_execpolicy_amendment: ExecPolicyAmendment,
     },
+    ApprovedProjectExecpolicyAmendment {
+        proposed_execpolicy_amendment: ExecPolicyAmendment,
+    },
     ApprovedForSession,
     NetworkPolicyAmendment {
         network_policy_amendment: NetworkPolicyAmendment,
@@ -97,6 +100,18 @@ pub fn new_approval_decision_cell(
                 ],
             )
         }
+        ApprovedProjectExecpolicyAmendment {
+            proposed_execpolicy_amendment,
+        } => (
+            "✔ ".green(),
+            vec![
+                actor.subject().into(),
+                "approved".bold(),
+                " codex to run commands that start with ".into(),
+                Span::from(exec_snippet(&proposed_execpolicy_amendment.command)).dim(),
+                " in this project only".bold(),
+            ],
+        ),
         ApprovedForSession => match subject {
             ApprovalDecisionSubject::Command(command) => {
                 let summary = if let Some(snippet) = non_empty_exec_snippet(&command) {

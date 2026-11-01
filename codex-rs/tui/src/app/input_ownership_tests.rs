@@ -58,6 +58,8 @@ async fn selection_copy_cancels_a_pending_find_editor_chord() -> Result<()> {
 #[tokio::test]
 async fn session_and_model_switcher_chords_remain_available_during_a_turn() -> Result<()> {
     let mut app = crate::app::test_support::make_test_app().await;
+    let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
+    app.app_event_tx = crate::app_event_sender::AppEventSender::new(event_tx);
     let mut server = Box::pin(crate::start_embedded_app_server_for_picker(&app.config)).await?;
     let started = server.start_thread(&app.config).await?;
     let thread_id = started.session.thread_id;
@@ -78,7 +80,8 @@ async fn session_and_model_switcher_chords_remain_available_during_a_turn() -> R
     let mut tui = crate::tui::test_support::make_test_tui()?;
     assert!(app.chat_widget.is_agent_turn_running());
     assert!(app.app_keymap_shortcuts_available());
-    for (completion, is_session) in [('l', true), ('m', false)] {
+    while event_rx.try_recv().is_ok() {}
+    for completion in ['n', 'l', 'm'] {
         assert_eq!(
             app.route_key_chord_event(
                 &mut tui,
@@ -90,7 +93,12 @@ async fn session_and_model_switcher_chords_remain_available_during_a_turn() -> R
             .route_key_chord_event(&mut tui, KeyCode::Char(completion).into())
             .expect("completed chord");
         app.handle_key_event(&mut tui, &mut server, routed).await;
-        if is_session {
+        if completion == 'n' {
+            assert!(matches!(
+                event_rx.try_recv(),
+                Ok(AppEvent::NewSession { name: None })
+            ));
+        } else if completion == 'l' {
             assert!(app.pending_open_session_switcher);
             assert!(app.pending_open_resume_picker);
         } else {

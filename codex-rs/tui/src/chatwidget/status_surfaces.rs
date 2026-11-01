@@ -161,7 +161,7 @@ impl ChatWidget {
     }
 
     fn sync_status_surface_shared_state(&mut self, selections: &StatusSurfaceSelections) {
-        if !selections.uses_git_branch() {
+        if !selections.uses_git_branch() && !self.local_settings.tui.sidebar {
             self.status_line_branch = None;
             self.status_line_branch_pending = false;
             self.status_line_branch_lookup_complete = false;
@@ -456,7 +456,7 @@ impl ChatWidget {
 
     pub(super) fn request_status_line_branch_refresh(&mut self) {
         let selections = self.status_surface_selections();
-        if !selections.uses_git_branch() {
+        if !selections.uses_git_branch() && !self.local_settings.tui.sidebar {
             return;
         }
         let cwd = self.status_line_cwd().to_path_buf();
@@ -598,6 +598,7 @@ impl ChatWidget {
             return;
         }
         self.status_line_branch_cwd = Some(cwd.to_path_buf());
+        self.sidebar_dirty_files = None;
         self.status_line_branch = None;
         self.status_line_branch_pending = false;
         self.status_line_branch_lookup_complete = false;
@@ -629,6 +630,8 @@ impl ChatWidget {
         let tx = self.app_event_tx.clone();
         tokio::spawn(async move {
             let branch = branch_summary::current_branch_name(runner.as_ref(), &cwd).await;
+            let count = branch_summary::dirty_file_count(runner.as_ref(), &cwd).await;
+            tx.send(AppEvent::SidebarDirtyFilesUpdated { cwd: cwd.clone(), count });
             tx.send(AppEvent::StatusLineBranchUpdated { cwd, branch });
         });
     }

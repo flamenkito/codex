@@ -37,6 +37,9 @@ impl ChatWidget {
         let app_event_tx = AppEventSender::new(app_event_tx.app_event_tx);
         let model = model.filter(|m| !m.trim().is_empty());
         let mut config = config;
+        let sidebar_routes =
+            codex_model_provider_info::model_routes::ModelRoutes::load(&config.codex_home)
+                .unwrap_or_default();
         config.model = model.clone();
         let prevent_idle_sleep = config.features.enabled(Feature::PreventIdleSleep);
         let placeholder = PLACEHOLDER.to_string();
@@ -150,6 +153,10 @@ impl ChatWidget {
             #[cfg(any(target_os = "windows", test))]
             windows_sandbox_elevated_setup_complete: false,
             token_info: None,
+            sidebar_mcp_status: HashMap::new(),
+            sidebar_dirty_files: None,
+            sidebar_turn_model: None,
+            sidebar_routes,
             token_usage_pending: false,
             rate_limit_snapshots_by_limit_id: BTreeMap::new(),
             refreshing_status_outputs: Vec::new(),

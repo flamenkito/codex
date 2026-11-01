@@ -246,6 +246,7 @@ mod clipboard;
 mod footer_selection;
 mod native_history;
 mod owned_transcript;
+mod status_sidebar;
 mod pending_interactive_replay;
 mod permission_shortcuts;
 mod pets;

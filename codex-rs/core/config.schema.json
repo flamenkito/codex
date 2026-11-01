@@ -5199,6 +5199,7 @@
               "find_transcript": null,
               "focus_activity": null,
               "leader": null,
+              "new_session": null,
               "open_agents": null,
               "open_external_editor": null,
               "open_models": null,
@@ -5446,6 +5447,11 @@
         "show_tooltips": {
           "default": true,
           "description": "Show startup tooltips in the TUI welcome screen. Defaults to `true`.",
+          "type": "boolean"
+        },
+        "sidebar": {
+          "default": true,
+          "description": "Show the workspace status sidebar when the terminal is wide enough.",
           "type": "boolean"
         },
         "status_line": {
@@ -6029,6 +6035,14 @@
           ],
           "description": "Prefix for persistent, context-aware shortcut menus."
         },
+        "new_session": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/KeybindingsSpec"
+            }
+          ],
+          "description": "Start a new session while the previous session keeps running."
+        },
         "open_agents": {
           "allOf": [
             {
@@ -6250,6 +6264,7 @@
             "find_transcript": null,
             "focus_activity": null,
             "leader": null,
+            "new_session": null,
             "open_agents": null,
             "open_external_editor": null,
             "open_models": null,

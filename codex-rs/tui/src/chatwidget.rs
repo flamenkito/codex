@@ -385,6 +385,7 @@ mod service_tiers;
 mod settings;
 mod settings_popups;
 mod side;
+mod sidebar;
 use self::safety_buffering::SafetyBufferingState;
 mod status_state;
 mod windows_sandbox_prompts;
@@ -636,6 +637,10 @@ pub(crate) struct ChatWidget {
     /// as "running" while this is populated, even if no agent turn is currently
     /// executing.
     mcp_startup_status: Option<HashMap<String, McpStartupStatus>>,
+    sidebar_mcp_status: HashMap<String, McpStartupStatus>,
+    pub(crate) sidebar_dirty_files: Option<usize>,
+    sidebar_turn_model: Option<String>,
+    sidebar_routes: codex_model_provider_info::model_routes::ModelRoutes,
     /// Expected MCP servers for the current startup round, seeded from enabled local config.
     mcp_startup_expected_servers: Option<HashSet<String>>,
     /// After startup settles, ignore stale updates until enough notifications confirm a new round.

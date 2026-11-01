@@ -521,6 +521,7 @@ impl KeyChordMatcher {
                 "open_presets" if pending.started_at.is_none() => "presets",
                 "open_sessions" => "sessions",
                 "open_models" => "models",
+                "new_session" => "new session",
                 "focus_activity" => "activity",
                 "find_transcript" => "find",
                 "open_warnings" => "warnings",

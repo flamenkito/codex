@@ -3429,6 +3429,11 @@ impl App {
                 self.chat_widget.set_status_line_branch(cwd, branch);
                 self.refresh_status_line();
             }
+            AppEvent::SidebarDirtyFilesUpdated { cwd, count } => {
+                if self.config.cwd.as_path() == cwd {
+                    self.chat_widget.sidebar_dirty_files = count;
+                }
+            }
             AppEvent::StatusLineGitSummaryUpdated { cwd, summary } => {
                 self.chat_widget.set_status_line_git_summary(cwd, summary);
                 self.refresh_status_line();

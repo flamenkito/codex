@@ -118,6 +118,53 @@ impl App {
         tui: &mut tui::Tui,
         screen_size: Size,
     ) -> Result<Rect> {
+        let full_screen_size = screen_size;
+        let area = Rect::new(0, 0, screen_size.width, screen_size.height);
+        let dashboard_visible = self
+            .chat_widget
+            .selected_index_for_present_view(AGENTS_OVERVIEW_VIEW_ID)
+            .is_some();
+        let (chat_area, sidebar_area) = if !dashboard_visible {
+            super::status_sidebar::split(area)
+        } else {
+            (area, None)
+        };
+        let screen_size = Size::new(chat_area.width, screen_size.height);
+        self.chat_widget.set_sidebar_visible(sidebar_area.is_some());
+        let mut sidebar_lines = self.chat_widget.sidebar_lines();
+        let mut agents = self
+            .agents_overview
+            .threads
+            .iter()
+            .filter_map(|(id, thread)| {
+                let thread = thread.as_ref()?;
+                (Some(*id) != self.chat_widget.thread_id() && thread.parent_thread_id.is_some())
+                    .then_some(thread)
+            })
+            .collect::<Vec<_>>();
+        agents.sort_by(|left, right| left.name.cmp(&right.name));
+        if !agents.is_empty() {
+            let footer_at = sidebar_lines
+                .iter()
+                .position(|line| line.to_string() == "Workspace")
+                .unwrap_or(sidebar_lines.len());
+            let footer = sidebar_lines.split_off(footer_at);
+            sidebar_lines.push(ratatui::text::Line::from(""));
+            sidebar_lines.push(ratatui::text::Line::from(
+                "┌ Models ──────────────────────────┐",
+            ));
+            for agent in agents.into_iter().take(6) {
+                sidebar_lines.push(ratatui::text::Line::from(format!(
+                    "│ {} → {}",
+                    agent.name.as_deref().unwrap_or("Untitled"),
+                    agent.model.as_deref().unwrap_or("unknown model")
+                )));
+            }
+            sidebar_lines.push(ratatui::text::Line::from(
+                "└─────────────────────────────────┘",
+            ));
+            sidebar_lines.extend(footer);
+        }
         self.chat_widget.sync_warnings(&self.transcript_cells);
         let motion = MotionMode::from_animations_enabled(
             self.local_settings.tui.animations && self.local_settings.tui.effects.shimmer,
@@ -128,8 +175,10 @@ impl App {
         } else {
             "esc latest"
         };
-        self.sync_owned_transcript(screen_size.width);
-        let transcript_width = self.chat_widget.history_wrap_width(screen_size.width);
+        let transcript_padding = 2;
+        let padded_width = screen_size.width.saturating_sub(2 * transcript_padding);
+        self.sync_owned_transcript(padded_width);
+        let transcript_width = self.chat_widget.history_wrap_width(padded_width);
         let composer_hint = if self
             .chat_widget
             .rendered_selection
@@ -206,9 +255,9 @@ impl App {
         drop(bottom);
         let available = screen_size.height.saturating_sub(bottom_height);
         let mut bottom_area = Rect::new(
-            /*x*/ 0,
+            /*x*/ 2,
             screen_size.height.saturating_sub(bottom_height),
-            screen_size.width,
+            screen_size.width.saturating_sub(4),
             bottom_height,
         );
         let mut rendered_cursor = None;
@@ -224,7 +273,7 @@ impl App {
             );
             let mut completion_tip_area = view.render_with_turn_tip_space(
                 Rect::new(
-                    /*x*/ 0,
+                    transcript_padding,
                     /*y*/ 0,
                     transcript_width,
                     transcript_bottom,
@@ -285,7 +334,7 @@ impl App {
                 transcript_bottom = bottom_area.y;
                 completion_tip_area = view.render_with_turn_tip_space(
                     Rect::new(
-                        /*x*/ 0,
+                        transcript_padding,
                         /*y*/ 0,
                         transcript_width,
                         transcript_bottom,
@@ -347,14 +396,17 @@ impl App {
                 .borrow_mut()
                 .render(frame.buffer);
             chat_widget.note_rendered_width(screen_size.width);
+            if let Some(area) = sidebar_area {
+                super::status_sidebar::render(area, frame.buffer, sidebar_lines.clone());
+            }
             let dialog = chat_widget.centered_dialog();
             let (foreground, foreground_area): (&dyn Renderable, Rect) =
                 if let Some(dialog) = &dialog {
                     let area = Rect::new(
                         /*x*/ 0,
                         /*y*/ 0,
-                        screen_size.width,
-                        screen_size.height,
+                        full_screen_size.width,
+                        full_screen_size.height,
                     );
                     if dialog.dims_backdrop() {
                         crate::bottom_pane::dim_switcher_backdrop(area, frame.buffer);

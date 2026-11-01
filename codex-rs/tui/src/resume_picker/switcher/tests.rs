@@ -141,6 +141,15 @@ async fn compact_rows_share_height_math_with_paging_and_fit_unicode_titles() {
     state.apply_filter();
     let rendered = lines(&state.filtered_rows[0], &state, true, 24);
     assert_eq!(rendered.len(), 2);
+    assert_eq!(
+        rendered[0]
+            .to_string()
+            .chars()
+            .take_while(|c| *c == ' ')
+            .count(),
+        3
+    );
+    assert!(rendered[1].to_string().starts_with(' '));
     assert!(rendered.iter().all(|line| line.width() <= 24));
     state.view_width = Some(24);
     assert_eq!(state.rendered_height_between(0, 0), rendered.len());
@@ -290,6 +299,20 @@ async fn popup_matches_opencode_geometry_surface_and_footer() {
     let populated_panel = super::super::layout::panel(&state, viewport);
     assert_eq!(populated_panel.width, 88);
     assert_eq!(populated_panel.height, 11);
+    let mut full_state = self::state();
+    full_state.all_rows = (0..8)
+        .map(|_| row(ThreadId::new(), "2026-10-31T12:00:00Z", "Session"))
+        .collect();
+    full_state.apply_filter();
+    assert_eq!(
+        super::super::layout::panel(&full_state, viewport).height,
+        14
+    );
+    // Four sessions, their date heading, and the overflow indicator must fit.
+    assert_eq!(
+        super::super::layout::list_area(&full_state, viewport).height,
+        6
+    );
     let mut terminal = Terminal::with_options(VT100Backend::new(140, 30)).unwrap();
     terminal.set_viewport_area(Rect::new(0, 0, 140, 30));
     let mut frame = terminal.get_frame();

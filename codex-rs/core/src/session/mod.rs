@@ -3302,6 +3302,7 @@ impl Session {
                 let (permissions, scope) = match decision {
                     ReviewDecision::Approved
                     | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+                    | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
                     | ReviewDecision::NetworkPolicyAmendment {
                         network_policy_amendment:
                             NetworkPolicyAmendment {

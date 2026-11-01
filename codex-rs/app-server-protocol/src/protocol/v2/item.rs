@@ -76,6 +76,10 @@ pub enum CommandExecutionApprovalDecision {
     AcceptWithExecpolicyAmendment {
         execpolicy_amendment: ExecPolicyAmendment,
     },
+    /// User approved a prefix to persist in the current project's `.codex/rules` only.
+    AcceptWithProjectExecpolicyAmendment {
+        execpolicy_amendment: ExecPolicyAmendment,
+    },
     /// User chose a persistent network policy rule (allow/deny) for this host.
     ApplyNetworkPolicyAmendment {
         network_policy_amendment: NetworkPolicyAmendment,
@@ -99,6 +103,11 @@ impl From<CoreReviewDecision> for CommandExecutionApprovalDecision {
                 execpolicy_amendment: proposed_execpolicy_amendment.into(),
             },
             CoreReviewDecision::ApprovedForSession => Self::AcceptForSession,
+            CoreReviewDecision::ApprovedProjectExecpolicyAmendment {
+                proposed_execpolicy_amendment,
+            } => Self::AcceptWithProjectExecpolicyAmendment {
+                execpolicy_amendment: proposed_execpolicy_amendment.into(),
+            },
             CoreReviewDecision::NetworkPolicyAmendment {
                 network_policy_amendment,
             } => Self::ApplyNetworkPolicyAmendment {

@@ -5,6 +5,36 @@ use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 #[test]
+fn user_prompt_gutters_preserve_source_ranges_on_wrapped_unicode_lines() {
+    let message = "Привет 世界 https://example.test/a long wrapped message\nещё одна строка";
+    for cell in [
+        new_user_prompt(message.to_string(), Vec::new(), Vec::new(), Vec::new()),
+        new_spoken_user_prompt(message.to_string()),
+        new_user_prompt(
+            message.to_string(),
+            Vec::new(),
+            vec![PathBuf::from("fixture.png")],
+            Vec::new(),
+        ),
+    ] {
+        for width in [12, 24, 60] {
+            let lines = cell.transcript_hyperlink_lines(width);
+            for line in &lines {
+                let visible = line.line.to_string();
+                if let Some(source) = &line.source {
+                    assert_eq!(
+                        visible.get(source.prefix_bytes..source.prefix_bytes + source.range.len()),
+                        Some(&source.text[source.range.clone()]),
+                        "width {width}, row {visible:?}",
+                    );
+                }
+                assert!(line.width() <= usize::from(width));
+            }
+        }
+    }
+}
+
+#[test]
 fn prefixed_wrapping_retains_one_source_line_across_widths_and_gutters() {
     let source = "  let result = compute(alpha, beta, gamma);  print(result);";
     let styled = Line::from(vec![

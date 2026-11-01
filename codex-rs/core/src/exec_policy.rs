@@ -666,6 +666,32 @@ pub(crate) async fn load_exec_policy_with_warning(
     }
 }
 
+/// Resolve the project rules directory using the same pre-project root markers as config discovery.
+pub(crate) async fn project_policy_folder(
+    config_stack: &ConfigLayerStack,
+    cwd: &Path,
+) -> std::io::Result<PathBuf> {
+    let mut markers = codex_config::default_project_root_markers();
+    for layer in config_stack.layers_low_to_high() {
+        if matches!(layer.name, ConfigLayerSource::Project { .. }) {
+            continue;
+        }
+        if let Some(configured) = codex_config::project_root_markers_from_config(&layer.config)? {
+            markers = configured;
+        }
+    }
+    for ancestor in cwd.ancestors() {
+        for marker in &markers {
+            match fs::metadata(ancestor.join(marker)).await {
+                Ok(_) => return Ok(ancestor.join(".codex")),
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+    Ok(cwd.join(".codex"))
+}
+
 pub async fn load_exec_policy(config_stack: &ConfigLayerStack) -> Result<Policy, ExecPolicyError> {
     // Disabled project layers already represent the trust decision, so hooks
     // and exec-policy loading can reuse the normal trusted-layer view.

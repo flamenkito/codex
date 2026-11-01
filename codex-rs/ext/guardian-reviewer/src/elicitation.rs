@@ -160,6 +160,7 @@ pub fn mcp_elicitation_response_from_guardian_decision(
         | ReviewDecision::ApprovedForSession
         | ReviewDecision::ApprovedMcpPolicyAmendment
         | ReviewDecision::ApprovedExecpolicyAmendment { .. }
+        | ReviewDecision::ApprovedProjectExecpolicyAmendment { .. }
         | ReviewDecision::NetworkPolicyAmendment { .. } => ElicitationResponse {
             action: ElicitationAction::Accept,
             content: Some(serde_json::json!({})),

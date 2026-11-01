@@ -5,7 +5,6 @@ use super::markdown_render_cache::MarkdownRenderCache;
 use super::*;
 use crate::async_question_reply::AsyncQuestionReply;
 use crate::style::accent_color_on;
-use crate::style::history_prompt_style;
 use crate::terminal_hyperlinks::annotate_web_urls;
 use crate::terminal_hyperlinks::lines_with_sources_eq;
 use crate::terminal_hyperlinks::remap_source_wrapped_line;
@@ -246,7 +245,7 @@ impl HistoryCell for UserHistoryCell {
             )
             .max(/*other*/ 1);
 
-        let style = history_prompt_style();
+        let style = crate::style::history_prompt_style();
         let element_style = user_message_element_style(style, accent_color_on(style.bg));
 
         let wrapped_images = plain_hyperlink_lines(adaptive_wrap_lines(
@@ -258,31 +257,42 @@ impl HistoryCell for UserHistoryCell {
 
         let mut wrapped_message =
             if let UserMessagePresentation::AsyncReplies { replies, cwd } = &self.presentation {
-                super::async_replies::render(replies, cwd, usize::from(wrap_width))
+                prefix_hyperlink_lines(
+                    super::async_replies::render(replies, cwd, usize::from(wrap_width)),
+                    "▎ ".cyan(),
+                    "▎ ".cyan(),
+                )
             } else {
                 let marker = if self.is_spoken() {
-                    "› ".red().bold()
+                    "▎ ".red().bold()
                 } else {
-                    "› ".bold().dim()
+                    "▎ ".cyan()
                 };
                 prefix_hyperlink_lines(
                     wrap_user_message(message, text_elements, style, wrap_width),
                     marker,
-                    "  ".into(),
+                    "▎ ".cyan(),
                 )
             };
         if wrapped_images.is_empty() && wrapped_message.is_empty() {
             return Vec::new();
         }
-        let mut lines = vec![HyperlinkLine::new(Line::from("").style(style))];
+        let blank_lines = || {
+            prefix_hyperlink_lines(
+                vec![HyperlinkLine::new(Line::from("").style(style))],
+                "▎".cyan(),
+                "▎ ".cyan(),
+            )
+        };
+        let mut lines = blank_lines();
         if !wrapped_images.is_empty() {
             lines.extend(prefix_hyperlink_lines(
                 wrapped_images,
-                "  ".into(),
-                "  ".into(),
+                "▎ ".cyan(),
+                "▎ ".cyan(),
             ));
             if !wrapped_message.is_empty() {
-                lines.push(HyperlinkLine::new(Line::from("").style(style)));
+                lines.extend(blank_lines());
             }
         }
         if self.is_spoken()
@@ -293,7 +303,7 @@ impl HistoryCell for UserHistoryCell {
             first.line.style.fg = None;
         }
         lines.extend(wrapped_message);
-        lines.push(HyperlinkLine::new(Line::from("").style(style)));
+        lines.extend(blank_lines());
         for source in lines.iter_mut().filter_map(|line| line.source.as_mut()) {
             source.right_reserve = 1;
             source.copy_as_prose |= matches!(

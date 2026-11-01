@@ -56,6 +56,7 @@ impl LocalSettings {
                 config.tui_alternate_screen != codex_config::types::AltScreenMode::Never,
             ),
             tui: Tui {
+                sidebar: true,
                 notification_settings: config.tui_notifications.clone(),
                 animations: config.animations,
                 screen_reader_detection_done: None,
@@ -158,6 +159,7 @@ impl LocalSettings {
         system_motion: crate::motion::MotionMode,
         screen_reader_default: crate::motion::MotionMode,
     ) {
+        self.tui.sidebar = true;
         if screen_reader_default == crate::motion::MotionMode::Reduced {
             // Consult the current layers so preferences edited after startup still win.
             self.tui.animations &= layers

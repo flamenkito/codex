@@ -655,9 +655,14 @@ pub(super) fn lines(
             == key
     {
         lines.push(Line::from(
-            fit(&switcher.group(row, reference), usize::from(width))
-                .cyan()
-                .bold(),
+            format!(
+                "   {}",
+                fit(
+                    &switcher.group(row, reference),
+                    usize::from(width.saturating_sub(3))
+                )
+            )
+            .set_style(crate::bottom_pane::switcher_group_style()),
         ));
     }
     let current = row.thread_id.is_some() && row.thread_id == state.current_switcher_thread();
@@ -692,12 +697,16 @@ pub(super) fn lines(
     } else {
         crate::bottom_pane::switcher_surface_style()
     };
-    let marker = if current { "●" } else { " " };
+    let marker = if current { " ● " } else { "   " };
     let line = Line::from(vec![
-        Span::raw(format!(" {marker} ")),
+        Span::raw(marker.to_string()),
         Span::raw(title),
         Span::raw("  "),
-        suffix.set_style(secondary_text_style()),
+        suffix.set_style(if selected {
+            selected_style()
+        } else {
+            crate::bottom_pane::switcher_secondary_style()
+        }),
     ]);
     lines.extend(apply_session_row_background(vec![line], style, width));
     lines
@@ -730,7 +739,10 @@ pub(super) fn render_search(
         } else {
             format!("Search: {}", state.query)
         };
-        frame.render_widget_ref(&Line::from(label), area);
+        frame.render_widget_ref(
+            &Line::from(label).style(crate::bottom_pane::switcher_secondary_style()),
+            area,
+        );
         let cursor_x = area
             .x
             .saturating_add(if state.query.is_empty() {
@@ -752,34 +764,34 @@ pub(super) fn footer(state: &PickerState, width: u16) -> Vec<Line<'static>> {
     } else if switcher.rename.is_some() {
         vec![
             "save ".into(),
-            "enter".set_style(secondary_text_style()),
+            "enter".set_style(crate::bottom_pane::switcher_secondary_style()),
             "   cancel ".into(),
-            "esc".set_style(secondary_text_style()),
+            "esc".set_style(crate::bottom_pane::switcher_secondary_style()),
         ]
     } else if switcher.leader_pending {
         vec![
             "directory ".into(),
-            "f".set_style(secondary_text_style()),
+            "f".set_style(crate::bottom_pane::switcher_secondary_style()),
             "   quick switch ".into(),
-            "1–9".set_style(secondary_text_style()),
+            "1–9".set_style(crate::bottom_pane::switcher_secondary_style()),
             "   cancel ".into(),
-            "esc".set_style(secondary_text_style()),
+            "esc".set_style(crate::bottom_pane::switcher_secondary_style()),
         ]
     } else if width >= 58 {
         vec![
             "pin/unpin ".into(),
-            "ctrl+f".set_style(secondary_text_style()),
+            "ctrl+f".set_style(crate::bottom_pane::switcher_secondary_style()),
             "  delete ".into(),
-            "ctrl+d".set_style(secondary_text_style()),
+            "ctrl+d".set_style(crate::bottom_pane::switcher_secondary_style()),
             "  rename ".into(),
-            "ctrl+r".set_style(secondary_text_style()),
+            "ctrl+r".set_style(crate::bottom_pane::switcher_secondary_style()),
         ]
     } else {
         vec![
             "switch ".into(),
-            "enter".set_style(secondary_text_style()),
+            "enter".set_style(crate::bottom_pane::switcher_secondary_style()),
             "  pin ".into(),
-            "ctrl+f".set_style(secondary_text_style()),
+            "ctrl+f".set_style(crate::bottom_pane::switcher_secondary_style()),
         ]
     };
     let message = state
